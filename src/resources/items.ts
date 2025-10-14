@@ -12,11 +12,21 @@ import {
   type CreateItemRequest,
   CreateItemRequestSchema,
   type UpdateItemRequest,
+  UpdateItemRequestSchema,
   type ItemResponse,
   ItemResponseSchema,
   type ListItemsQuery,
+  ListItemsQuerySchema,
   type ListItemsResponse,
   ListItemsResponseSchema,
+  type BulkItemRequest,
+  BulkItemRequestSchema,
+  type BulkItemResponse,
+  BulkItemResponseSchema,
+  type GetItemQuery,
+  GetItemQuerySchema,
+  type ListItemsByAccountIdQuery,
+  ListItemsByAccountIdQuerySchema,
 } from '../types/items.js'
 
 /**
@@ -31,35 +41,6 @@ export const ItemImageResponseSchema = z.object({
 })
 
 export type ItemImageResponse = z.infer<typeof ItemImageResponseSchema>
-
-/**
- * 商品一括登録リクエスト
- */
-export const BulkItemRequestSchema = z.object({
-  /** 商品リスト（1-100個） */
-  items: z.array(CreateItemRequestSchema).min(1).max(100),
-})
-
-export type BulkItemRequest = z.infer<typeof BulkItemRequestSchema>
-
-/**
- * 商品一括登録レスポンス
- */
-export const BulkItemResponseSchema = z.object({
-  /** 成功した商品リスト */
-  succeeded: z.array(ItemResponseSchema),
-  /** 失敗した商品リスト */
-  failed: z.array(
-    z.object({
-      /** 商品コード */
-      code: z.string(),
-      /** エラーメッセージ */
-      error: z.string(),
-    }),
-  ),
-})
-
-export type BulkItemResponse = z.infer<typeof BulkItemResponseSchema>
 
 /**
  * 商品一覧を取得
@@ -81,9 +62,19 @@ export async function listItems(
   client: OpenLogiClient,
   params?: ListItemsQuery,
 ): Promise<ListItemsResponse> {
+  const result = ListItemsQuerySchema.safeParse(params)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `クエリパラメータの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, ListItemsResponseSchema, 'items', {
     method: 'GET',
-    searchParams: params as Record<string, string | number | boolean>,
+    searchParams: result.data as Record<string, string | number>,
   })
 }
 
@@ -107,9 +98,19 @@ export async function createItem(
   client: OpenLogiClient,
   data: CreateItemRequest,
 ): Promise<ItemResponse> {
+  const result = CreateItemRequestSchema.safeParse(data)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, ItemResponseSchema, 'items', {
     method: 'POST',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -134,9 +135,19 @@ export async function bulkCreateItems(
   client: OpenLogiClient,
   data: BulkItemRequest,
 ): Promise<BulkItemResponse> {
+  const result = BulkItemRequestSchema.safeParse(data)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, BulkItemResponseSchema, 'items/bulk', {
     method: 'POST',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -152,9 +163,16 @@ export async function bulkCreateItems(
  * const item = await getItem(client, '12345')
  * ```
  */
-export async function getItem(client: OpenLogiClient, id: string): Promise<ItemResponse> {
+export async function getItem(
+  client: OpenLogiClient,
+  id: string,
+  query?: GetItemQuery,
+): Promise<ItemResponse> {
+  const parsedQuery = query ? GetItemQuerySchema.parse(query) : undefined
+
   return request(client, ItemResponseSchema, `items/${id}`, {
     method: 'GET',
+    searchParams: parsedQuery as Record<string, string | number> | undefined,
   })
 }
 
@@ -179,9 +197,19 @@ export async function updateItem(
   id: string,
   data: UpdateItemRequest,
 ): Promise<ItemResponse> {
+  const result = UpdateItemRequestSchema.safeParse(data)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, ItemResponseSchema, `items/${id}`, {
     method: 'PUT',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -196,8 +224,10 @@ export async function updateItem(
  * await deleteItem(client, '12345')
  * ```
  */
-export async function deleteItem(client: OpenLogiClient, id: string): Promise<void> {
-  await client.http.delete(`items/${id}`)
+export async function deleteItem(client: OpenLogiClient, id: string): Promise<ItemResponse> {
+  return request(client, ItemResponseSchema, `items/${id}`, {
+    method: 'DELETE',
+  })
 }
 
 /**
@@ -253,6 +283,40 @@ export async function uploadItemImage(
 }
 
 /**
+ * code指定で商品画像を登録
+ */
+export async function uploadItemImageByCode(
+  client: OpenLogiClient,
+  accountId: string,
+  code: string,
+  file: File | Blob,
+): Promise<ItemImageResponse> {
+  const formData = new FormData()
+  const filename = file instanceof File ? file.name : 'image.jpg'
+  formData.append('file', file, filename)
+
+  const response = await client.http.post(`items/${accountId}/${code}/images`, {
+    body: formData,
+    headers: {
+      'Content-Type': undefined,
+    },
+  })
+
+  const json = await response.json()
+  const result = ItemImageResponseSchema.safeParse(json)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `レスポンスの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
+  return result.data
+}
+
+/**
  * 商品画像を削除
  *
  * @param client - OpenLogiクライアント
@@ -273,6 +337,18 @@ export async function deleteItemImage(
 }
 
 /**
+ * code指定で商品画像を削除
+ */
+export async function deleteItemImageByCode(
+  client: OpenLogiClient,
+  accountId: string,
+  code: string,
+  imageId: string,
+): Promise<void> {
+  await client.http.delete(`items/${accountId}/${code}/${imageId}`)
+}
+
+/**
  * code指定で商品情報を取得
  *
  * @param client - OpenLogiクライアント
@@ -289,9 +365,13 @@ export async function getItemByCode(
   client: OpenLogiClient,
   accountId: string,
   code: string,
+  query?: GetItemQuery,
 ): Promise<ItemResponse> {
+  const parsedQuery = query ? GetItemQuerySchema.parse(query) : undefined
+
   return request(client, ItemResponseSchema, `items/${accountId}/${code}`, {
     method: 'GET',
+    searchParams: parsedQuery as Record<string, string | number> | undefined,
   })
 }
 
@@ -317,9 +397,19 @@ export async function updateItemByCode(
   code: string,
   data: UpdateItemRequest,
 ): Promise<ItemResponse> {
+  const result = UpdateItemRequestSchema.safeParse(data)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, ItemResponseSchema, `items/${accountId}/${code}`, {
     method: 'PUT',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -339,6 +429,32 @@ export async function deleteItemByCode(
   client: OpenLogiClient,
   accountId: string,
   code: string,
-): Promise<void> {
-  await client.http.delete(`items/${accountId}/${code}`)
+): Promise<ItemResponse> {
+  return request(client, ItemResponseSchema, `items/${accountId}/${code}`, {
+    method: 'DELETE',
+  })
+}
+
+/**
+ * アカウントID指定で商品一覧を取得
+ */
+export async function listItemsByAccountId(
+  client: OpenLogiClient,
+  accountId: string,
+  query: ListItemsByAccountIdQuery,
+): Promise<ListItemsResponse> {
+  const result = ListItemsByAccountIdQuerySchema.safeParse(query)
+
+  if (!result.success) {
+    throw new ValidationError(
+      `クエリパラメータの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
+  return request(client, ListItemsResponseSchema, `items/${accountId}`, {
+    method: 'GET',
+    searchParams: result.data as Record<string, string | number>,
+  })
 }

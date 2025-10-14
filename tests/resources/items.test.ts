@@ -8,13 +8,16 @@ import { server } from '../setup'
 import { createClient } from '../../src/client'
 import {
   listItems,
+  listItemsByAccountId,
   createItem,
   bulkCreateItems,
   getItem,
   updateItem,
   deleteItem,
   uploadItemImage,
+  uploadItemImageByCode,
   deleteItemImage,
+  deleteItemImageByCode,
 } from '../../src/resources/items'
 import { ValidationError } from '../../src/errors'
 
@@ -40,13 +43,7 @@ describe('Items API', () => {
         id: 'item-001',
         code: 'TEST-001',
         name: 'Test Item 1',
-        price: 1000,
-      })
-      expect(response.pagination).toMatchObject({
-        current_page: 1,
-        total_pages: 1,
-        total_count: 2,
-        per_page: 20,
+        price: '1000',
       })
     })
 
@@ -57,7 +54,13 @@ describe('Items API', () => {
       })
 
       expect(response.items).toBeDefined()
-      expect(response.pagination).toBeDefined()
+    })
+
+    it('idを指定しない場合はValidationErrorとなる', async () => {
+      await expect(
+        // @ts-expect-error intentionally invalid to confirm runtime validation
+        listItems(client, {}),
+      ).rejects.toThrow(ValidationError)
     })
   })
 
@@ -65,7 +68,6 @@ describe('Items API', () => {
     it('商品を作成できる', async () => {
       const itemData = {
         code: 'NEW-001',
-        price: 1500,
         name: 'New Item',
         temperature_zone: 'dry' as const,
       }
@@ -75,26 +77,18 @@ describe('Items API', () => {
       expect(response).toMatchObject({
         id: 'item-new',
         code: 'NEW-001',
-        price: 1500,
         name: 'New Item',
       })
       expect(response.created_at).toBeDefined()
       expect(response.updated_at).toBeDefined()
     })
 
-    it('バリデーションエラーが発生する', async () => {
-      server.use(
-        http.post(`${BASE_URL}/items`, () => {
-          return HttpResponse.json({ message: 'code is required' }, { status: 422 })
-        }),
-      )
-
+    it('商品コードが空の場合はValidationErrorとなる', async () => {
       await expect(
         createItem(client, {
           code: '',
-          price: 1000,
         }),
-      ).rejects.toThrow()
+      ).rejects.toThrow(ValidationError)
     })
 
     it('認証エラーが発生する', async () => {
@@ -124,54 +118,10 @@ describe('Items API', () => {
 
       const response = await bulkCreateItems(client, itemsData)
 
-      expect(response.succeeded).toHaveLength(2)
-      expect(response.succeeded[0]).toMatchObject({
+      expect(response.items).toHaveLength(2)
+      expect(response.items[0]).toMatchObject({
         code: 'BULK-001',
-        price: 1000,
-      })
-      expect(response.succeeded[1]).toMatchObject({
-        code: 'BULK-002',
-        price: 2000,
-      })
-      expect(response.failed).toHaveLength(0)
-    })
-
-    it('一部失敗した場合でも結果を返す', async () => {
-      server.use(
-        http.post(`${BASE_URL}/items/bulk`, () => {
-          return HttpResponse.json({
-            succeeded: [
-              {
-                id: 'item-bulk-0',
-                code: 'BULK-001',
-                price: 1000,
-                created_at: '2025-01-11T00:00:00Z',
-                updated_at: '2025-01-11T00:00:00Z',
-                stock: 0,
-              },
-            ],
-            failed: [
-              {
-                code: 'BULK-002',
-                error: 'Duplicate code',
-              },
-            ],
-          })
-        }),
-      )
-
-      const response = await bulkCreateItems(client, {
-        items: [
-          { code: 'BULK-001', price: 1000 },
-          { code: 'BULK-002', price: 2000 },
-        ],
-      })
-
-      expect(response.succeeded).toHaveLength(1)
-      expect(response.failed).toHaveLength(1)
-      expect(response.failed[0]).toMatchObject({
-        code: 'BULK-002',
-        error: 'Duplicate code',
+        price: '1000',
       })
     })
   })
@@ -184,12 +134,18 @@ describe('Items API', () => {
         id: 'item-001',
         code: 'TEST-001',
         name: 'Test Item',
-        price: 1000,
+        price: '1000',
       })
     })
 
     it('存在しない商品はNotFoundErrorを投げる', async () => {
       await expect(getItem(client, 'not-found')).rejects.toThrow()
+    })
+
+    it('在庫情報を含めて取得できる', async () => {
+      const response = await getItem(client, 'item-001', { stock: 1 })
+
+      expect(response.stock).toBe(100)
     })
   })
 
@@ -204,7 +160,7 @@ describe('Items API', () => {
 
       expect(response).toMatchObject({
         id: 'item-001',
-        price: 1500,
+        price: '1500',
         name: 'Updated Item',
       })
       expect(response.updated_at).toBeDefined()
@@ -215,13 +171,20 @@ describe('Items API', () => {
         price: 2000,
       })
 
-      expect(response.price).toBe(2000)
+      expect(response.price).toBe('2000')
     })
   })
 
   describe('deleteItem', () => {
     it('商品を削除できる', async () => {
-      await expect(deleteItem(client, 'item-001')).resolves.not.toThrow()
+      const response = await deleteItem(client, 'item-001')
+
+      expect(response).toMatchObject({
+        id: 'item-001',
+        code: 'TEST-001',
+        name: 'Deleted Item',
+        price: '1000',
+      })
     })
 
     it('存在しない商品の削除はエラーを投げる', async () => {
@@ -288,6 +251,41 @@ describe('Items API', () => {
     })
   })
 
+  describe('listItemsByAccountId', () => {
+    it('アカウントIDと識別番号・商品コードで商品一覧を取得できる', async () => {
+      const response = await listItemsByAccountId(client, 'ACC-001', {
+        identifier: 'ID-001',
+        code: 'CODE-001',
+      })
+
+      expect(response.items).toHaveLength(1)
+      expect(response.items[0].code).toBe('CODE-001')
+    })
+
+    it('必要なクエリを指定しない場合はValidationErrorとなる', async () => {
+      await expect(
+        // @ts-expect-error runtime validation check
+        listItemsByAccountId(client, 'ACC-001', { identifier: 'ID-001' }),
+      ).rejects.toThrow(ValidationError)
+    })
+  })
+
+  describe('商品画像 code 指定', () => {
+    it('code指定で商品画像をアップロードできる', async () => {
+      const file = new Blob(['fake-image-data'], { type: 'image/png' })
+
+      const response = await uploadItemImageByCode(client, 'ACC-001', 'CODE-001', file)
+
+      expect(response.id).toBe('img-002')
+    })
+
+    it('code指定で商品画像を削除できる', async () => {
+      await expect(
+        deleteItemImageByCode(client, 'ACC-001', 'CODE-001', 'img-002'),
+      ).resolves.not.toThrow()
+    })
+  })
+
   describe('エラーハンドリング', () => {
     it('ネットワークエラーを適切に処理する', async () => {
       server.use(
@@ -296,7 +294,7 @@ describe('Items API', () => {
         }),
       )
 
-      await expect(listItems(client)).rejects.toThrow()
+      await expect(listItems(client, { id: 'item-001' })).rejects.toThrow()
     })
 
     it('500エラーを適切に処理する', async () => {
@@ -306,7 +304,7 @@ describe('Items API', () => {
         }),
       )
 
-      await expect(listItems(client)).rejects.toThrow()
+      await expect(listItems(client, { id: 'item-001' })).rejects.toThrow()
     })
 
     it('不正なレスポンスを適切に処理する', async () => {
@@ -318,7 +316,7 @@ describe('Items API', () => {
         }),
       )
 
-      await expect(listItems(client)).rejects.toThrow(ValidationError)
+      await expect(listItems(client, { id: 'item-001' })).rejects.toThrow(ValidationError)
     })
   })
 })

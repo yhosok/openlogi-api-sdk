@@ -8,6 +8,21 @@ import { z } from 'zod'
 import { TemperatureZoneSchema, LotLimitTypeSchema } from './common'
 
 /**
+ * 価格スキーマ（リクエスト/レスポンスで数値または数値文字列）
+ */
+const ItemPriceSchema = z.union([
+  z
+    .number()
+    .int()
+    .min(0),
+  z
+    .string()
+    .regex(/^\d+$/, { message: 'Price must be a numeric string' }),
+])
+
+export type ItemPrice = z.infer<typeof ItemPriceSchema>
+
+/**
  * 商品の国際情報
  */
 export const ItemInternationalInfoSchema = z.object({
@@ -53,8 +68,8 @@ export type ChildItem = z.infer<typeof ChildItemSchema>
 export const CreateItemRequestSchema = z.object({
   /** 商品コード（必須、1-30文字） */
   code: z.string().min(1).max(30),
-  /** 価格（必須） */
-  price: z.number().int(),
+  /** 価格（任意、数値または数値文字列） */
+  price: ItemPriceSchema.optional(),
   /** 商品名（最大255文字） */
   name: z.string().max(255).optional(),
   /** 軽減税率対象 */
@@ -115,7 +130,7 @@ export const ItemResponseSchema = z.object({
   /** 商品名 */
   name: z.string().optional(),
   /** 価格 */
-  price: z.number().int(),
+  price: ItemPriceSchema.optional(),
   /** 軽減税率対象 */
   is_reduced_tax: z.boolean().optional(),
   /** HSコード */
@@ -175,36 +190,50 @@ export type ListItemsQuery = z.infer<typeof ListItemsQuerySchema>
 export const ListItemsResponseSchema = z.object({
   /** 商品リスト */
   items: z.array(ItemResponseSchema),
-  /** ページネーション情報 */
-  pagination: z.object({
-    current_page: z.number().int(),
-    total_pages: z.number().int(),
-    total_count: z.number().int(),
-    per_page: z.number().int(),
-  }),
 })
 
 export type ListItemsResponse = z.infer<typeof ListItemsResponseSchema>
 
 /**
- * 商品削除レスポンス
+ * 商品取得クエリ
  */
-export const DeleteItemResponseSchema = z.object({
-  /** 削除成功フラグ */
-  success: z.boolean(),
-  /** メッセージ */
-  message: z.string().optional(),
+export const GetItemQuerySchema = z.object({
+  /** 在庫情報を含むかどうか */
+  stock: z.literal(1).optional(),
 })
 
-export type DeleteItemResponse = z.infer<typeof DeleteItemResponseSchema>
+export type GetItemQuery = z.infer<typeof GetItemQuerySchema>
 
 /**
- * 商品画像アップロードファイル（multipart/form-data形式）
- * File または Blob のいずれかを受け付ける
+ * アカウントIDを指定した商品一覧取得のクエリパラメータ
  */
-export const ItemImageUploadFileSchema = z.union([
-  z.instanceof(File), // ブラウザ環境
-  z.instanceof(Blob), // Node.js環境
-])
+export const ListItemsByAccountIdQuerySchema = z.object({
+  /** 商品識別番号（カンマ区切り最大100件） */
+  identifier: z.string(),
+  /** 商品コード（カンマ区切り最大100件） */
+  code: z.string(),
+  /** 在庫情報を含めるフラグ */
+  stock: z.literal(1).optional(),
+})
 
-export type ItemImageUploadFile = z.infer<typeof ItemImageUploadFileSchema>
+export type ListItemsByAccountIdQuery = z.infer<typeof ListItemsByAccountIdQuerySchema>
+
+/**
+ * 商品一括登録リクエスト
+ */
+export const BulkItemRequestSchema = z.object({
+  /** 商品リスト（1-100個） */
+  items: z.array(CreateItemRequestSchema).min(1).max(100),
+})
+
+export type BulkItemRequest = z.infer<typeof BulkItemRequestSchema>
+
+/**
+ * 商品一括登録レスポンス（仕様準拠）
+ */
+export const BulkItemResponseSchema = z.object({
+  /** 登録された商品リスト */
+  items: z.array(ItemResponseSchema),
+})
+
+export type BulkItemResponse = z.infer<typeof BulkItemResponseSchema>

@@ -16,36 +16,30 @@ const BASE_URL = 'http://localhost:8080/api'
  */
 export const handlers = [
   // 商品API
-  http.get(`${BASE_URL}/items`, () => {
+  http.get(`${BASE_URL}/items`, ({ request }) => {
+    const url = new URL(request.url)
+    const id = url.searchParams.get('id')
+
+    if (!id) {
+      return HttpResponse.json(
+        { error: 'validation_failed', error_description: '`id` is required' },
+        { status: 422 },
+      )
+    }
+
+    const items = id.split(',').map((itemId, index) => ({
+      id: itemId,
+      code: `TEST-${(index + 1).toString().padStart(3, '0')}`,
+      name: `Test Item ${index + 1}`,
+      price: '1000',
+      temperature_zone: 'dry',
+      stock: 100,
+      created_at: '2025-01-10T00:00:00Z',
+      updated_at: '2025-01-10T00:00:00Z',
+    }))
+
     return HttpResponse.json({
-      items: [
-        {
-          id: 'item-001',
-          code: 'TEST-001',
-          name: 'Test Item 1',
-          price: 1000,
-          temperature_zone: 'dry',
-          stock: 100,
-          created_at: '2025-01-10T00:00:00Z',
-          updated_at: '2025-01-10T00:00:00Z',
-        },
-        {
-          id: 'item-002',
-          code: 'TEST-002',
-          name: 'Test Item 2',
-          price: 2000,
-          temperature_zone: 'constant',
-          stock: 50,
-          created_at: '2025-01-10T00:00:00Z',
-          updated_at: '2025-01-10T00:00:00Z',
-        },
-      ],
-      pagination: {
-        current_page: 1,
-        total_pages: 1,
-        total_count: 2,
-        per_page: 20,
-      },
+      items,
     })
   }),
 
@@ -57,25 +51,46 @@ export const handlers = [
       updated_at: '2025-01-11T00:00:00Z',
       stock: 0,
       ...body,
+      price: body && typeof body === 'object' && 'price' in body ? String(body.price) : undefined,
     })
   }),
 
   http.post(`${BASE_URL}/items/bulk`, async ({ request }) => {
-    const body = (await request.json()) as { items: Array<{ code: string; price: number }> }
+    const body = (await request.json()) as { items: Array<{ code: string; price?: number | string }> }
     return HttpResponse.json({
-      succeeded: body.items.map((item, index) => ({
+      items: body.items.map((item, index) => ({
         id: `item-bulk-${index}`,
         code: item.code,
-        price: item.price,
+        price: item.price !== undefined ? String(item.price) : undefined,
         created_at: '2025-01-11T00:00:00Z',
         updated_at: '2025-01-11T00:00:00Z',
         stock: 0,
       })),
-      failed: [],
     })
   }),
 
-  http.get(`${BASE_URL}/items/:id`, ({ params }) => {
+  http.get(`${BASE_URL}/items/:id`, ({ request, params }) => {
+    const url = new URL(request.url)
+    const identifier = url.searchParams.get('identifier')
+    const code = url.searchParams.get('code')
+
+    if (identifier && code) {
+      return HttpResponse.json({
+        items: [
+          {
+            id: 'item-001',
+            code: code.split(',')[0] ?? 'UNKNOWN',
+            name: 'Account Item',
+            price: '1000',
+            temperature_zone: 'dry',
+            stock: 100,
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-10T00:00:00Z',
+          },
+        ],
+      })
+    }
+
     const { id } = params
     if (id === 'not-found') {
       return HttpResponse.json({ message: '商品が見つかりません' }, { status: 404 })
@@ -84,7 +99,7 @@ export const handlers = [
       id: id as string,
       code: 'TEST-001',
       name: 'Test Item',
-      price: 1000,
+      price: '1000',
       temperature_zone: 'dry',
       stock: 100,
       created_at: '2025-01-10T00:00:00Z',
@@ -95,21 +110,36 @@ export const handlers = [
   http.put(`${BASE_URL}/items/:id`, async ({ params, request }) => {
     const { id } = params
     const body = await request.json()
-    return HttpResponse.json({
+    const responseBody = {
       id: id as string,
       code: 'TEST-001',
       name: 'Test Item',
-      price: 1000,
+      price: '1000',
       temperature_zone: 'dry',
       stock: 100,
       created_at: '2025-01-10T00:00:00Z',
       updated_at: '2025-01-11T00:00:00Z',
-      ...body,
-    })
+      ...(body ?? {}),
+    } as Record<string, unknown>
+
+    if (body && typeof body === 'object' && 'price' in body && body.price !== undefined) {
+      responseBody.price = String(body.price)
+    }
+
+    return HttpResponse.json(responseBody)
   }),
 
   http.delete(`${BASE_URL}/items/:id`, () => {
-    return new HttpResponse(null, { status: 204 })
+    return HttpResponse.json({
+      id: 'item-001',
+      code: 'TEST-001',
+      name: 'Deleted Item',
+      price: '1000',
+      temperature_zone: 'dry',
+      stock: 0,
+      created_at: '2025-01-10T00:00:00Z',
+      updated_at: '2025-01-11T00:00:00Z',
+    })
   }),
 
   http.post(`${BASE_URL}/items/:id/images`, async ({ request, params }) => {
@@ -142,7 +172,26 @@ export const handlers = [
   }),
 
   http.delete(`${BASE_URL}/items/:id/images/:imageId`, () => {
-    return new HttpResponse(null, { status: 204 })
+    return HttpResponse.json({})
+  }),
+
+  http.post(`${BASE_URL}/items/:accountId/:code/images`, async ({ request }) => {
+    try {
+      const formData = await request.formData()
+      const file = formData.get('file')
+
+      if (!file || !(file instanceof Blob)) {
+        return HttpResponse.json({ message: 'file is required' }, { status: 422 })
+      }
+    } catch {
+      console.warn('FormData parsing failed, using default response')
+    }
+
+    return HttpResponse.json({ id: 'img-002' })
+  }),
+
+  http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, () => {
+    return HttpResponse.json({})
   }),
 
   // 入荷API
