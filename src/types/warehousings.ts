@@ -35,11 +35,11 @@ export const LotItemSchema = z.object({
   /** ロットID */
   id: z.string(),
   /** 賞味期限 */
-  expiry_at: z.string().optional(),
+  expiry_at: z.string().nullable().optional(),
   /** 製造日 */
-  manufacture_date: z.string().optional(),
+  manufacture_date: z.string().nullable().optional(),
   /** ロット引当可能日 */
-  lot_allocatable_at: z.string().optional(),
+  lot_allocatable_at: z.string().nullable().optional(),
   /** 入荷実績数 */
   received: z.number().int().min(0),
 })
@@ -73,6 +73,15 @@ export const WarehousingItemResponseSchema = z.object({
   quantity: z.number().int().min(1),
   /** 入荷実績数（一覧・詳細取得時に含まれる） */
   received: z.number().int().min(0).optional(),
+})
+
+export type WarehousingItemResponse = z.infer<typeof WarehousingItemResponseSchema>
+
+/**
+ * 入荷商品詳細情報（レスポンス用）
+ * 詳細取得時に lot/case 情報などが付与される
+ */
+export const WarehousingItemDetailResponseSchema = WarehousingItemResponseSchema.extend({
   /** ロット情報（詳細取得時に含まれる） */
   lot_items: z.array(LotItemSchema).optional(),
   /** ケース情報（詳細取得時に含まれる） */
@@ -81,7 +90,7 @@ export const WarehousingItemResponseSchema = z.object({
   warehoused_count: z.number().int().min(0).optional(),
 })
 
-export type WarehousingItemResponse = z.infer<typeof WarehousingItemResponseSchema>
+export type WarehousingItemDetailResponse = z.infer<typeof WarehousingItemDetailResponseSchema>
 
 /**
  * 入荷作成リクエストのベーススキーマ
@@ -148,13 +157,11 @@ export type CreateWarehousingRequest = z.infer<typeof CreateWarehousingRequestSc
 
 /**
  * 入荷更新リクエストのスキーマ
+ * 公式仕様ではPOST/PUTともにWarehousingRequestを使用
  */
-export const UpdateWarehousingRequestSchema = CreateWarehousingRequestBaseSchema.partial().extend({
-  /** 入荷商品リスト（更新時もitemsを変更する場合は全件指定） */
-  items: z.array(WarehousingItemSchema).min(1).max(25).optional(),
-})
+export const UpdateWarehousingRequestSchema = CreateWarehousingRequestSchema
 
-export type UpdateWarehousingRequest = z.infer<typeof UpdateWarehousingRequestSchema>
+export type UpdateWarehousingRequest = CreateWarehousingRequest
 
 /**
  * 入荷ステータス（公式API仕様に準拠）
@@ -174,6 +181,8 @@ export type WarehousingStatus = z.infer<typeof WarehousingStatusSchema>
 export const WarehousingResponseSchema = z.object({
   /** 入荷ID */
   id: z.string(),
+  /** 入荷ステータス */
+  status: WarehousingStatusSchema,
   /** 検品タイプ */
   inspection_type: InspectionTypeSchema,
   /** 入荷商品リスト */
@@ -212,8 +221,6 @@ export const WarehousingResponseSchema = z.object({
   company_memo: z.string().optional(),
   /** 識別子 */
   identifier: z.string().optional(),
-  /** ステータス */
-  status: WarehousingStatusSchema.optional(),
   /** 倉庫コード */
   warehouse: z.string().optional(),
   /** 倉庫情報 */
@@ -238,9 +245,21 @@ export const WarehousingResponseSchema = z.object({
   halfway: z.boolean().optional(),
   /** 作成日時 */
   created_at: z.string().optional(),
+  /** 返品入荷フラグ */
+  shipment_return: z.boolean().optional(),
 })
 
 export type WarehousingResponse = z.infer<typeof WarehousingResponseSchema>
+
+/**
+ * 入荷詳細レスポンス（入荷実績などを含む）
+ */
+export const WarehousingDetailResponseSchema = WarehousingResponseSchema.extend({
+  /** 入荷商品リスト（詳細情報付き） */
+  items: z.array(WarehousingItemDetailResponseSchema),
+})
+
+export type WarehousingDetailResponse = z.infer<typeof WarehousingDetailResponseSchema>
 
 /**
  * 入荷リストレスポンス（公式APIではクエリパラメータなし、ページネーションなし）
@@ -269,3 +288,13 @@ export const StockedWarehousingQuerySchema = z.object({
 })
 
 export type StockedWarehousingQuery = z.infer<typeof StockedWarehousingQuerySchema>
+
+/**
+ * 入荷実績レスポンス
+ */
+export const StockedWarehousingResponseSchema = z.object({
+  /** 入荷実績リスト */
+  warehousings: z.array(WarehousingDetailResponseSchema),
+})
+
+export type StockedWarehousingResponse = z.infer<typeof StockedWarehousingResponseSchema>

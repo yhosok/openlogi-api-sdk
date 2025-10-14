@@ -689,34 +689,8 @@ export type ShipmentResponse = z.infer<typeof ShipmentResponseSchema>
  * 出荷リスト取得のクエリパラメータ
  */
 export const ListShipmentsQuerySchema = z.object({
-  /** ページ番号 */
-  page: z.number().int().min(1).default(1).optional(),
-  /** 1ページあたりの件数 */
-  per_page: z.number().int().min(1).max(100).default(20).optional(),
-  /** 識別子で検索 */
-  identifier: z.string().optional(),
-  /** 注文番号で検索 */
-  order_no: z.string().optional(),
-  /** ステータスで検索 */
-  status: ShipmentStatusSchema.optional(),
-  /** 保留中のみ */
-  suspended_only: z.boolean().optional(),
-  /** 出荷予定日開始 */
-  shipping_date_from: DateStringSchema.optional(),
-  /** 出荷予定日終了 */
-  shipping_date_to: DateStringSchema.optional(),
-  /** 配送希望日開始 */
-  delivery_date_from: DateStringSchema.optional(),
-  /** 配送希望日終了 */
-  delivery_date_to: DateStringSchema.optional(),
-  /** 配送先名で検索 */
-  delivery_name: z.string().optional(),
-  /** 追跡番号で検索 */
-  tracking_no: z.string().optional(),
-  /** 作成日開始 */
-  created_from: DateStringSchema.optional(),
-  /** 作成日終了 */
-  created_to: DateStringSchema.optional(),
+  /** 出荷ID（カンマ区切りで最大100件） */
+  id: z.string().min(1, 'idは1文字以上で指定してください').optional(),
 })
 
 export type ListShipmentsQuery = z.infer<typeof ListShipmentsQuerySchema>
@@ -727,13 +701,6 @@ export type ListShipmentsQuery = z.infer<typeof ListShipmentsQuerySchema>
 export const ListShipmentsResponseSchema = z.object({
   /** 出荷リスト */
   shipments: z.array(ShipmentResponseSchema),
-  /** ページネーション情報 */
-  pagination: z.object({
-    current_page: z.number().int(),
-    total_pages: z.number().int(),
-    total_count: z.number().int(),
-    per_page: z.number().int(),
-  }),
 })
 
 export type ListShipmentsResponse = z.infer<typeof ListShipmentsResponseSchema>
@@ -829,8 +796,10 @@ export type ClearAllocationRequest = z.infer<typeof ClearAllocationRequestSchema
  * 出荷依頼一括作成リクエスト
  */
 export const BulkShipmentRequestSchema = z.object({
-  /** 出荷依頼リスト（1-100個） */
-  shipments: z.array(CreateShipmentRequestSchema).min(1).max(100),
+  /** 出荷依頼リスト */
+  shipments: z.array(CreateShipmentRequestSchema).min(1),
+  /** 出荷ルール適用フラグ */
+  apply_rule: z.boolean().optional(),
 })
 
 export type BulkShipmentRequest = z.infer<typeof BulkShipmentRequestSchema>
@@ -839,17 +808,8 @@ export type BulkShipmentRequest = z.infer<typeof BulkShipmentRequestSchema>
  * 出荷依頼一括作成レスポンス
  */
 export const BulkShipmentResponseSchema = z.object({
-  /** 成功した出荷依頼リスト */
-  succeeded: z.array(ShipmentResponseSchema),
-  /** 失敗した出荷依頼リスト */
-  failed: z.array(
-    z.object({
-      /** 識別子または注文番号 */
-      identifier: z.string(),
-      /** エラーメッセージ */
-      error: z.string(),
-    }),
-  ),
+  /** 作成された出荷依頼リスト */
+  shipments: z.array(ShipmentResponseSchema),
 })
 
 export type BulkShipmentResponse = z.infer<typeof BulkShipmentResponseSchema>

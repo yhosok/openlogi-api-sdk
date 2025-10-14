@@ -397,12 +397,7 @@ const result = await bulkCreateShipments(client, {
   ],
 })
 
-console.log(`成功: ${result.succeeded.length}件`)
-console.log(`失敗: ${result.failed.length}件`)
-
-result.failed.forEach((failed) => {
-  console.error(`${failed.identifier}: ${failed.error}`)
-})
+console.log(`作成件数: ${result.shipments.length}件`)
 ```
 
 #### 出荷依頼を更新

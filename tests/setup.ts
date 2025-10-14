@@ -203,6 +203,7 @@ export const handlers = [
           inspection_type: 'CODE',
           arrival_date: '2025-01-20',
           status: 'waiting',
+          shipment_return: false,
           items: [
             {
               id: 'item-001',
@@ -256,6 +257,7 @@ export const handlers = [
           inspection_type: 'CODE',
           arrival_date: '2025-01-15',
           status: 'stocked',
+          shipment_return: false,
           items: [
             {
               id: 'item-001',
@@ -263,6 +265,7 @@ export const handlers = [
               name: 'テスト商品',
               quantity: 100,
               received: 100,
+              warehoused_count: 100,
             },
           ],
           created_at: '2025-01-10T00:00:00Z',
@@ -281,6 +284,7 @@ export const handlers = [
           inspection_type: 'CODE',
           arrival_date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
           status: 'stocked',
+          shipment_return: false,
           items: [
             {
               id: 'item-001',
@@ -288,6 +292,7 @@ export const handlers = [
               name: 'テスト商品',
               quantity: 100,
               received: 100,
+              warehoused_count: 100,
             },
           ],
           created_at: '2025-01-10T00:00:00Z',
@@ -317,6 +322,7 @@ export const handlers = [
       inspection_type: 'CODE',
       arrival_date: '2025-01-20',
       status: 'waiting',
+      shipment_return: false,
       items: [
         {
           id: 'item-001',
@@ -660,12 +666,6 @@ export const handlers = [
             updated_at: '2025-01-13T00:00:00Z',
           },
         ],
-        pagination: {
-          current_page: 1,
-          total_pages: 1,
-          total_count: 1,
-          per_page: 20,
-        },
       })
     }
 
@@ -702,12 +702,6 @@ export const handlers = [
             updated_at: '2025-01-10T00:00:00Z',
           },
         ],
-        pagination: {
-          current_page: 1,
-          total_pages: 1,
-          total_count: 1,
-          per_page: 20,
-        },
       })
     }
 
@@ -746,14 +740,13 @@ export const handlers = [
       shipments: Array<{ order_no: string }>
     }
     return HttpResponse.json({
-      succeeded: body.shipments.map((shipment, index) => ({
+      shipments: body.shipments.map((shipment, index) => ({
         id: `ship-bulk-${index}`,
         status: 'PENDING',
         created_at: '2025-01-11T00:00:00Z',
         updated_at: '2025-01-11T00:00:00Z',
         ...shipment,
       })),
-      failed: [],
     })
   }),
 

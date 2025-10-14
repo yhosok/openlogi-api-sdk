@@ -54,23 +54,16 @@ describe('Shipments API', () => {
         name: '山田太郎',
         postcode: '1700013',
       })
-      expect(response.pagination).toMatchObject({
-        current_page: 1,
-        total_pages: 1,
-        total_count: 1,
-        per_page: 20,
-      })
+      expect(response).not.toHaveProperty('pagination')
     })
 
-    it('クエリパラメータ付きで一覧を取得できる', async () => {
+    it('idクエリパラメータ付きで一覧を取得できる', async () => {
       const response = await listShipments(client, {
-        page: 1,
-        per_page: 10,
-        status: 'PENDING',
+        id: 'ship-001,ship-002',
       })
 
       expect(response.shipments).toBeDefined()
-      expect(response.pagination).toBeDefined()
+      expect(response).not.toHaveProperty('pagination')
     })
   })
 
@@ -251,76 +244,52 @@ describe('Shipments API', () => {
 
       const response = await bulkCreateShipments(client, shipmentsData)
 
-      expect(response.succeeded).toHaveLength(2)
-      expect(response.succeeded[0].order_no).toBe('ORDER-BULK-1')
-      expect(response.succeeded[1].order_no).toBe('ORDER-BULK-2')
-      expect(response.failed).toHaveLength(0)
+      expect(response.shipments).toHaveLength(2)
+      expect(response.shipments[0].order_no).toBe('ORDER-BULK-1')
+      expect(response.shipments[1].order_no).toBe('ORDER-BULK-2')
     })
 
-    it('一部失敗した場合でも結果を返す', async () => {
+    it('バリデーションエラーの場合は422が発生する', async () => {
       server.use(
         http.post(`${BASE_URL}/shipments/bulk`, () => {
           return HttpResponse.json({
-            succeeded: [
-              {
-                id: 'ship-bulk-0',
-                order_no: 'ORDER-BULK-1',
-                status: 'PENDING',
-                items: [{ code: 'TEST-001', quantity: 1 }],
-                recipient: {
-                  name: '山田太郎',
-                  postcode: '1000001',
-                  prefecture: '東京都',
-                  address1: '千代田1-1-1',
-                  phone: '09012345678',
-                },
-                created_at: '2025-01-11T00:00:00Z',
-                updated_at: '2025-01-11T00:00:00Z',
-              },
-            ],
-            failed: [
-              {
-                identifier: 'ORDER-BULK-2',
-                error: 'Item not found',
-              },
-            ],
-          })
+            error: 'validation_failed',
+            error_description: 'items[1].code must exist',
+            errors: {
+              'shipments.1.items.0.code': ['商品コードが存在しません'],
+            },
+          }, { status: 422 })
         }),
       )
 
-      const response = await bulkCreateShipments(client, {
-        shipments: [
-          {
-            order_no: 'ORDER-BULK-1',
-            items: [{ code: 'TEST-001', quantity: 1 }],
-            recipient: {
-              name: '山田太郎',
-              postcode: '1000001',
-              prefecture: '東京都',
-              address1: '千代田1-1-1',
-              phone: '09012345678',
+      await expect(
+        bulkCreateShipments(client, {
+          shipments: [
+            {
+              order_no: 'ORDER-BULK-1',
+              items: [{ code: 'TEST-001', quantity: 1 }],
+              recipient: {
+                name: '山田太郎',
+                postcode: '1000001',
+                prefecture: '東京都',
+                address1: '千代田1-1-1',
+                phone: '09012345678',
+              },
             },
-          },
-          {
-            order_no: 'ORDER-BULK-2',
-            items: [{ code: 'INVALID', quantity: 1 }],
-            recipient: {
-              name: '田中花子',
-              postcode: '1000002',
-              prefecture: '東京都',
-              address1: '千代田2-2-2',
-              phone: '09087654321',
+            {
+              order_no: 'ORDER-BULK-2',
+              items: [{ code: 'INVALID', quantity: 1 }],
+              recipient: {
+                name: '田中花子',
+                postcode: '1000002',
+                prefecture: '東京都',
+                address1: '千代田2-2-2',
+                phone: '09087654321',
+              },
             },
-          },
-        ],
-      })
-
-      expect(response.succeeded).toHaveLength(1)
-      expect(response.failed).toHaveLength(1)
-      expect(response.failed[0]).toMatchObject({
-        identifier: 'ORDER-BULK-2',
-        error: 'Item not found',
-      })
+          ],
+        }),
+      ).rejects.toThrow()
     })
   })
 

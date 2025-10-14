@@ -5,28 +5,24 @@
  * @packageDocumentation
  */
 
-import { z } from 'zod'
 import { request, type OpenLogiClient } from '../client.js'
+import { ValidationError } from '../errors.js'
 import {
   type CreateWarehousingRequest,
+  CreateWarehousingRequestSchema,
   type UpdateWarehousingRequest,
+  UpdateWarehousingRequestSchema,
   type WarehousingResponse,
   WarehousingResponseSchema,
+  type WarehousingDetailResponse,
+  WarehousingDetailResponseSchema,
   type ListWarehousingResponse,
   ListWarehousingResponseSchema,
   type StockedWarehousingQuery,
   StockedWarehousingQuerySchema,
+  type StockedWarehousingResponse,
+  StockedWarehousingResponseSchema,
 } from '../types/warehousings.js'
-
-/**
- * 入荷実績レスポンス
- */
-export const StockedWarehousingResponseSchema = z.object({
-  /** 入荷実績リスト */
-  warehousings: z.array(WarehousingResponseSchema),
-})
-
-export type StockedWarehousingResponse = z.infer<typeof StockedWarehousingResponseSchema>
 
 /**
  * 入荷依頼一覧を取得
@@ -68,9 +64,18 @@ export async function createWarehousing(
   client: OpenLogiClient,
   data: CreateWarehousingRequest,
 ): Promise<WarehousingResponse> {
+  const result = CreateWarehousingRequestSchema.safeParse(data)
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, WarehousingResponseSchema, 'warehousings', {
     method: 'POST',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -89,8 +94,8 @@ export async function createWarehousing(
 export async function getWarehousing(
   client: OpenLogiClient,
   id: string,
-): Promise<WarehousingResponse> {
-  return request(client, WarehousingResponseSchema, `warehousings/${id}`, {
+): Promise<WarehousingDetailResponse> {
+  return request(client, WarehousingDetailResponseSchema, `warehousings/${id}`, {
     method: 'GET',
   })
 }
@@ -118,9 +123,18 @@ export async function updateWarehousing(
   id: string,
   data: UpdateWarehousingRequest,
 ): Promise<WarehousingResponse> {
+  const result = UpdateWarehousingRequestSchema.safeParse(data)
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, WarehousingResponseSchema, `warehousings/${id}`, {
     method: 'PUT',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -173,7 +187,7 @@ export async function getStockedWarehousing(
   const validatedQuery = query ? StockedWarehousingQuerySchema.parse(query) : undefined
   return request(client, StockedWarehousingResponseSchema, 'warehousings/stocked', {
     method: 'GET',
-    searchParams: validatedQuery as Record<string, string>,
+    searchParams: validatedQuery,
   })
 }
 

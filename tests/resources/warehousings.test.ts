@@ -39,6 +39,7 @@ describe('Warehousings API', () => {
         inspection_type: 'CODE',
         arrival_date: '2025-01-20',
         status: 'waiting',
+        shipment_return: false,
       })
       expect(response.warehousings[0].items).toHaveLength(1)
       // レスポンスのitemsにはid, code, name, quantityが含まれる
@@ -146,6 +147,7 @@ describe('Warehousings API', () => {
         inspection_type: 'CODE',
         arrival_date: '2025-01-20',
         status: 'waiting',
+        shipment_return: false,
       })
       expect(response.items).toHaveLength(1)
     })
@@ -197,6 +199,7 @@ describe('Warehousings API', () => {
   describe('updateWarehousing', () => {
     it('入荷依頼を更新できる', async () => {
       const updateData = {
+        inspection_type: 'CODE',
         arrival_date: '2025-01-26',
         items: [
           {
@@ -215,12 +218,12 @@ describe('Warehousings API', () => {
       expect(response.items[0].quantity).toBe(150)
     })
 
-    it('一部のフィールドのみ更新できる', async () => {
-      const response = await updateWarehousing(client, 'wh-001', {
-        arrival_date: '2025-01-27',
-      })
-
-      expect(response.arrival_date).toBe('2025-01-27')
+    it('必須フィールドが欠けているとバリデーションエラーになる', async () => {
+      await expect(
+        updateWarehousing(client, 'wh-001', {
+          arrival_date: '2025-01-27',
+        }),
+      ).rejects.toThrow(ValidationError)
     })
   })
 
@@ -254,9 +257,13 @@ describe('Warehousings API', () => {
       expect(response.warehousings).toBeInstanceOf(Array)
       if (response.warehousings.length > 0) {
         expect(response.warehousings[0]).toHaveProperty('id')
-        expect(response.warehousings[0].status).toBe('stocked')
+        expect(response.warehousings[0]).toMatchObject({
+          status: 'stocked',
+          shipment_return: false,
+        })
         // 公式APIでは received フィールドを使用
         expect(response.warehousings[0].items[0]).toHaveProperty('received')
+        expect(response.warehousings[0].items[0]).toHaveProperty('warehoused_count')
         // レスポンスのitemsにはid, code, nameも含まれる
         expect(response.warehousings[0].items[0]).toMatchObject({
           id: 'item-001',
@@ -320,9 +327,11 @@ describe('Warehousings API', () => {
       expect(response.warehousings[0]).toMatchObject({
         id: 'wh-stocked-date',
         status: 'stocked',
+        shipment_return: false,
       })
       expect(response.warehousings[0].arrival_date).toBe('2025-01-15')
       expect(response.warehousings[0].items[0]).toHaveProperty('received')
+      expect(response.warehousings[0].items[0]).toHaveProperty('warehoused_count')
       expect(response).not.toHaveProperty('retrieved_at')
     })
 
