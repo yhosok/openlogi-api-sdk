@@ -57,12 +57,15 @@ const client = createClient({
   baseUrl: 'http://localhost:8080', // 本番環境では適切なURLに変更
 })
 
-// 商品一覧を取得
+// パターン1: パラメータなしで呼び出し（全商品を取得）
+const allItems = await listItems(client)
+console.log(`取得した商品数: ${allItems.items.length}`)
+
+// パターン2: 特定のIDでフィルタリング（パラメータを指定する場合、idは必須）
 const response = await listItems(client, {
-  id: 'item-001,item-002',  // 商品IDをカンマ区切りで指定（必須）
+  id: 'item-001,item-002',  // 商品ID（必須、カンマ区切りで最大100件）
 })
 
-console.log(`取得した商品数: ${response.items.length}`)
 response.items.forEach((item) => {
   console.log(`${item.code}: ${item.name} - ¥${item.price}`)
 })
@@ -79,9 +82,13 @@ const client = createClient({
   baseUrl: 'http://localhost:8080',
 })
 
-// 商品一覧を取得
+// パターン1: パラメータなしで呼び出し（全商品を取得）
+const allItems = await listItems(client)
+console.log(`取得した商品数: ${allItems.items.length}`)
+
+// パターン2: 特定のIDでフィルタリング（パラメータを指定する場合、idは必須）
 const response = await listItems(client, {
-  id: 'item-001,item-002',  // 商品IDをカンマ区切りで指定（必須）
+  id: 'item-001,item-002',  // 商品ID（必須、カンマ区切りで最大100件）
 })
 
 console.log(`取得した商品数: ${response.items.length}`)
@@ -100,18 +107,21 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-// 商品IDを指定して取得（カンマ区切りで最大100件）
+// パターン1: パラメータなしで呼び出し（全商品を取得）
+const allItems = await listItems(client)
+
+// パターン2: 特定のIDでフィルタリング（パラメータを指定する場合、idは必須）
 const response = await listItems(client, {
-  id: 'item-001,item-002,item-003',
+  id: 'item-001,item-002,item-003',  // 商品ID（必須、カンマ区切りで最大100件）
 })
 
 console.log(`取得した商品数: ${response.items.length}`)
 response.pagination // ページネーション情報
 
-// 在庫情報を含めて取得
+// パターン3: 在庫情報も含める
 const responseWithStock = await listItems(client, {
   id: 'item-001',
-  stock: 1,  // 在庫情報を含める
+  stock: 1,  // 在庫情報を含める（任意）
 })
 
 console.log(`在庫数: ${responseWithStock.items[0].stock}`)
@@ -141,6 +151,35 @@ const newItem = await createItem(client, {
 console.log(`商品を作成しました: ${newItem.id}`)
 ```
 
+#### 商品を一括登録
+
+```typescript
+import { createClient, bulkCreateItems } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const result = await bulkCreateItems(client, {
+  items: [
+    {
+      code: 'ITEM-001',
+      name: '商品1',
+      price: 1000,
+      temperature_zone: 'dry',
+    },
+    {
+      code: 'ITEM-002',
+      name: '商品2',
+      price: 2000,
+      temperature_zone: 'cold',
+    },
+  ],
+})
+
+console.log(`${result.items.length}件の商品を登録しました`)
+```
+
 #### 商品情報を更新
 
 ```typescript
@@ -167,8 +206,8 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-await deleteItem(client, '12345')
-console.log('商品を削除しました')
+const deletedItem = await deleteItem(client, '12345')
+console.log(`商品を削除しました: ${deletedItem.id}`)
 ```
 
 #### 商品画像を登録
@@ -187,7 +226,7 @@ const imageBlob = new Blob([imageBuffer], { type: 'image/png' })
 
 const image = await uploadItemImage(client, '12345', imageBlob)
 
-console.log(`画像を登録しました: ${image.url}`)
+console.log(`画像を登録しました: ${image.id}`)
 
 // ブラウザ環境での使用例（jpeg形式）
 const fileInput = document.querySelector('input[type="file"]')
@@ -195,7 +234,7 @@ const file = fileInput.files[0]
 
 const browserImage = await uploadItemImage(client, '12345', file)
 
-console.log(`画像を登録しました: ${browserImage.url}`)
+console.log(`画像を登録しました: ${browserImage.id}`)
 ```
 
 #### 商品コードで検索・更新
@@ -216,6 +255,70 @@ const updated = await updateItemByCode(client, 'account-123', 'ITEM-001', {
   price: 2000,
 })
 console.log(`更新: ${updated.price}円`)
+```
+
+#### アカウントIDで商品一覧を取得
+
+```typescript
+import { createClient, listItemsByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// identifierまたはcodeで商品一覧を取得
+const response = await listItemsByAccountId(client, 'account-123', {
+  identifier: '2015-00001,2015-00002',  // 商品識別番号（必須）
+  code: 'ITEM-001,ITEM-002',            // 商品コード（必須）
+  stock: 1,                              // 在庫情報を含める（任意）
+})
+
+console.log(`取得した商品数: ${response.items.length}`)
+```
+
+#### 商品コードで画像を登録
+
+```typescript
+import { createClient, uploadItemImageByCode } from 'openlogi-api-sdk'
+import fs from 'fs'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const imageBuffer = fs.readFileSync('product-image.png')
+const imageBlob = new Blob([imageBuffer], { type: 'image/png' })
+
+const image = await uploadItemImageByCode(client, 'account-123', 'ITEM-001', imageBlob)
+console.log(`画像を登録しました: ${image.id}`)
+```
+
+#### 商品画像を削除
+
+```typescript
+import { createClient, deleteItemImage } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// IDで画像を削除
+await deleteItemImage(client, '12345', 'image-001')
+console.log('画像を削除しました')
+```
+
+#### 商品コードで画像を削除
+
+```typescript
+import { createClient, deleteItemImageByCode } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// 商品コードで画像を削除
+await deleteItemImageByCode(client, 'account-123', 'ITEM-001', 'image-001')
+console.log('画像を削除しました')
 ```
 
 ### 入荷API
@@ -262,15 +365,9 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-const response = await listWarehousing(client, {
-  page: 1,
-  per_page: 20,
-  status: 'PENDING', // ステータスでフィルタ
-  from_date: '2025-01-01',
-  to_date: '2025-01-31',
-})
+const response = await listWarehousing(client)
 
-console.log(`入荷依頼数: ${response.total}`)
+console.log(`入荷依頼数: ${response.warehousings.length}`)
 ```
 
 #### 入荷実績を取得
@@ -342,7 +439,7 @@ const shipment = await createShipment(client, {
   ],
   delivery_info: {
     name: '山田太郎',
-    postal_code: '1000001',
+    postcode: '1000001',
     prefecture: '東京都',
     city: '千代田区',
     address1: '千代田1-1-1',
@@ -375,7 +472,7 @@ const result = await bulkCreateShipments(client, {
       items: [{ code: 'ITEM-001', quantity: 1 }],
       delivery_info: {
         name: '山田太郎',
-        postal_code: '1000001',
+        postcode: '1000001',
         prefecture: '東京都',
         city: '千代田区',
         address1: '千代田1-1-1',
@@ -387,7 +484,7 @@ const result = await bulkCreateShipments(client, {
       items: [{ code: 'ITEM-002', quantity: 2 }],
       delivery_info: {
         name: '佐藤花子',
-        postal_code: '1500001',
+        postcode: '1500001',
         prefecture: '東京都',
         city: '渋谷区',
         address1: '神宮前1-1-1',
@@ -413,7 +510,7 @@ const updated = await updateShipment(client, '12345', {
   shipping_date: '2025-01-26',
   delivery_info: {
     name: '山田太郎',
-    postal_code: '1000002',
+    postcode: '1000002',
     prefecture: '東京都',
     city: '千代田区',
     address1: '千代田2-2-2',
@@ -438,7 +535,7 @@ const modified = await modifyShipment(client, '12345', {
   modifications: {
     delivery_info: {
       name: '山田太郎',
-      postal_code: '1000003',
+      postcode: '1000003',
       prefecture: '東京都',
       city: '千代田区',
       address1: '千代田3-3-3',
@@ -460,6 +557,103 @@ const client = createClient({
 })
 
 const cancelled = await cancelShipment(client, '12345')
+console.log(`出荷依頼をキャンセルしました: ${cancelled.status}`)
+```
+
+#### アカウントIDで出荷依頼一覧を取得
+
+```typescript
+import { createClient, listShipmentsByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const response = await listShipmentsByAccountId(client, 'TS001', {
+  identifier: '2015-00001,2015-00002',
+})
+
+console.log(`取得した出荷依頼数: ${response.shipments.length}`)
+```
+
+#### アカウントIDとidentifierで出荷依頼を取得
+
+```typescript
+import { createClient, getShipmentByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const shipment = await getShipmentByAccountId(client, 'TS001', '2015-00001')
+console.log(`出荷依頼を取得しました: ${shipment.id}`)
+```
+
+#### アカウントIDとidentifierで出荷依頼を更新
+
+```typescript
+import { createClient, updateShipmentByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const updated = await updateShipmentByAccountId(client, 'TS001', '2015-00001', {
+  shipping_date: '2025-01-26',
+})
+
+console.log(`出荷依頼を更新しました: ${updated.id}`)
+```
+
+#### アカウントIDとidentifierで出荷依頼を削除
+
+```typescript
+import { createClient, deleteShipmentByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+await deleteShipmentByAccountId(client, 'TS001', '2015-00001')
+console.log('出荷依頼を削除しました')
+```
+
+#### アカウントIDとidentifierで出荷依頼を修正
+
+```typescript
+import { createClient, modifyShipmentByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const modified = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', {
+  reason: '配送先住所の誤りを修正',
+  modifications: {
+    delivery_info: {
+      name: '山田太郎',
+      postcode: '1000004',
+      prefecture: '東京都',
+      city: '千代田区',
+      address1: '千代田4-4-4',
+      phone: '09012345678',
+    },
+  },
+})
+
+console.log(`出荷依頼を修正しました: ${modified.id}`)
+```
+
+#### アカウントIDとidentifierで出荷依頼をキャンセル
+
+```typescript
+import { createClient, cancelShipmentByAccountId } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+const cancelled = await cancelShipmentByAccountId(client, 'TS001', '2015-00001')
 console.log(`出荷依頼をキャンセルしました: ${cancelled.status}`)
 ```
 
@@ -572,8 +766,13 @@ const client = createClient({
 })
 
 try {
+  // 商品情報のみを取得
   const item = await getItem(client, '12345')
   console.log(item)
+
+  // 在庫情報を含めて取得
+  const itemWithStock = await getItem(client, '12345', { stock: 1 })
+  console.log(`在庫数: ${itemWithStock.stock}`)
 } catch (error) {
   if (error instanceof AuthenticationError) {
     console.error('認証エラー: APIトークンを確認してください')
