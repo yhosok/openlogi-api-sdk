@@ -361,17 +361,14 @@ describe('Shipments API', () => {
   })
 
   describe('modifyShipment', () => {
-    it('出荷依頼を修正できる', async () => {
+    it('出荷依頼の受取人情報を修正できる', async () => {
       const modifyData = {
-        reason: '配送先住所の誤りを修正',
-        modifications: {
-          recipient: {
-            name: '山田太郎',
-            postcode: '1000002',
-            prefecture: '東京都',
-            address1: '千代田2-2-2',
-            phone: '09012345678',
-          },
+        recipient: {
+          name: '山田太郎',
+          postcode: '1000002',
+          prefecture: '東京都',
+          address1: '千代田2-2-2',
+          phone: '09012345678',
         },
       }
 
@@ -385,17 +382,9 @@ describe('Shipments API', () => {
       expect(response.updated_at).toBeDefined()
     })
 
-    it('商品情報を修正できる', async () => {
+    it('配送時間帯を修正できる', async () => {
       const modifyData = {
-        reason: '数量を修正',
-        modifications: {
-          items: [
-            {
-              code: 'TEST-001',
-              quantity: 3,
-            },
-          ],
-        },
+        delivery_time_slot: '14',
       }
 
       const response = await modifyShipment(client, 'ship-001', modifyData)
@@ -403,19 +392,33 @@ describe('Shipments API', () => {
       expect(response.status).toBe('PENDING')
     })
 
-    it('理由なしの修正はエラーを投げる', async () => {
-      server.use(
-        http.post(`${BASE_URL}/shipments/:id/modify`, () => {
-          return HttpResponse.json({ message: 'reason is required' }, { status: 422 })
-        }),
-      )
+    it('配送希望日を修正できる', async () => {
+      const modifyData = {
+        delivery_date: '2025-02-01',
+      }
 
-      await expect(
-        modifyShipment(client, 'ship-001', {
-          reason: '',
-          modifications: {},
-        }),
-      ).rejects.toThrow()
+      const response = await modifyShipment(client, 'ship-001', modifyData)
+
+      expect(response.status).toBe('PENDING')
+    })
+
+    it('複数のフィールドを同時に修正できる', async () => {
+      const modifyData = {
+        recipient: {
+          name: '田中花子',
+          postcode: '1000003',
+          prefecture: '東京都',
+          address1: '千代田3-3-3',
+          phone: '09011112222',
+        },
+        delivery_time_slot: 'AM',
+        delivery_date: '2025-02-05',
+      }
+
+      const response = await modifyShipment(client, 'ship-001', modifyData)
+
+      expect(response.status).toBe('PENDING')
+      expect(response.recipient?.name).toBe('田中花子')
     })
   })
 
@@ -1476,16 +1479,14 @@ describe('Shipments API', () => {
       it('アカウントIDとidentifierで出荷依頼を修正できる', async () => {
         const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
         const modifyData = {
-          reason: '配送先住所の誤りを修正',
-          modifications: {
-            recipient: {
-              name: '田中花子',
-              postcode: '1000002',
-              prefecture: '東京都',
-              address1: '千代田2-2-2',
-              phone: '09087654321',
-            },
+          recipient: {
+            name: '田中花子',
+            postcode: '1000002',
+            prefecture: '東京都',
+            address1: '千代田2-2-2',
+            phone: '09087654321',
           },
+          delivery_time_slot: 'AM',
         }
 
         const response = await modifyShipmentByAccountId(

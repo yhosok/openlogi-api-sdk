@@ -530,18 +530,16 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-const modified = await modifyShipment(client, '12345', {
-  reason: '配送先住所の誤りを修正',
-  modifications: {
-    delivery_info: {
-      name: '山田太郎',
-      postcode: '1000003',
-      prefecture: '東京都',
-      city: '千代田区',
-      address1: '千代田3-3-3',
-      phone: '09012345678',
-    },
+const modified = await modifyShipment(client, 'TS001-S000001', {
+  recipient: {
+    name: '山田太郎',
+    postcode: '1000003',
+    prefecture: '東京都',
+    address1: '千代田3-3-3',
+    phone: '09012345678',
   },
+  delivery_time_slot: 'AM',
+  delivery_date: '2025-02-01',
 })
 
 console.log(`出荷依頼を修正しました: ${modified.id}`)
@@ -628,17 +626,15 @@ const client = createClient({
 })
 
 const modified = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', {
-  reason: '配送先住所の誤りを修正',
-  modifications: {
-    delivery_info: {
-      name: '山田太郎',
-      postcode: '1000004',
-      prefecture: '東京都',
-      city: '千代田区',
-      address1: '千代田4-4-4',
-      phone: '09012345678',
-    },
+  recipient: {
+    name: '山田太郎',
+    postcode: '1000004',
+    prefecture: '東京都',
+    address1: '千代田4-4-4',
+    phone: '09012345678',
   },
+  delivery_time_slot: '14',
+  delivery_date: '2025-02-05',
 })
 
 console.log(`出荷依頼を修正しました: ${modified.id}`)

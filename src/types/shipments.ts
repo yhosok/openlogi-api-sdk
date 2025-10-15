@@ -906,3 +906,42 @@ export const ListShipmentsByIdentifierQuerySchema = z.object({
 })
 
 export type ListShipmentsByIdentifierQuery = z.infer<typeof ListShipmentsByIdentifierQuerySchema>
+
+/**
+ * 出荷依頼修正リクエスト
+ * OpenAPI仕様の ModifyShipmentRequest に対応
+ *
+ * ステータスがピッキング中・ピッキング済み・梱包済みの出荷依頼の修正を依頼します。
+ * データ取り込み後の修正となりますので、別途事務手数料＋作業進捗状況による作業費用がかかります。
+ *
+ * @remarks
+ * - パスパラメータで出荷IDを指定するため、identifierやitemsフィールドは不要です
+ * - 変更可能なフィールド: recipient, delivery_time_slot, delivery_date
+ * - 海外発送の場合は梱包済みのステータス以降は修正依頼ができません
+ * - 作業進捗状況によっては修正依頼にお応えできない場合があります
+ *
+ * @example
+ * ```typescript
+ * const modifyData: ModifyShipmentRequest = {
+ *   recipient: {
+ *     name: '山田太郎',
+ *     postcode: '1000002',
+ *     prefecture: '東京都',
+ *     address1: '千代田2-2-2',
+ *     phone: '09012345678'
+ *   },
+ *   delivery_time_slot: 'AM',
+ *   delivery_date: '2025-02-01'
+ * }
+ * ```
+ */
+export const ModifyShipmentRequestSchema = z.object({
+  /** 受取人情報 */
+  recipient: RecipientInfoSchema.optional(),
+  /** 配送時間帯（AM, 12, 14, 16, 18, 19） */
+  delivery_time_slot: DeliveryTimeSlotSchema.optional(),
+  /** 配送希望日（YYYY-MM-DD形式） */
+  delivery_date: DateStringSchema.optional(),
+})
+
+export type ModifyShipmentRequest = z.infer<typeof ModifyShipmentRequestSchema>

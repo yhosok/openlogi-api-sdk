@@ -840,9 +840,6 @@ export const handlers = [
 
     // 3セグメント（accountId + identifier + action）の場合
     if (action) {
-      const modifications =
-        body && typeof body === 'object' && 'modifications' in body ? body.modifications : {}
-
       if (action === 'modify') {
         return HttpResponse.json({
           id: 'ship-by-identifier-001',
@@ -850,7 +847,7 @@ export const handlers = [
           status: 'PICKING',
           items: [{ code: 'TEST-001', quantity: 1 }],
           updated_at: '2025-01-13T00:00:00Z',
-          ...modifications,
+          ...(body && typeof body === 'object' ? body : {}),
         })
       } else if (action === 'cancel') {
         return HttpResponse.json({
@@ -868,8 +865,6 @@ export const handlers = [
     const actionParam = identifierOrAction
 
     if (actionParam === 'modify') {
-      const modifications =
-        body && typeof body === 'object' && 'modifications' in body ? body.modifications : {}
       return HttpResponse.json({
         id: idParam as string,
         order_no: 'ORDER-001',
@@ -890,7 +885,7 @@ export const handlers = [
         },
         created_at: '2025-01-10T00:00:00Z',
         updated_at: '2025-01-11T00:00:00Z',
-        ...modifications,
+        ...(body && typeof body === 'object' ? body : {}),
       })
     } else if (actionParam === 'cancel') {
       return HttpResponse.json({

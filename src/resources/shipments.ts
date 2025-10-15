@@ -12,7 +12,6 @@ import {
   type CreateShipmentRequest,
   CreateShipmentRequestSchema,
   type UpdateShipmentRequest,
-  UpdateShipmentRequestSchema,
   type ShipmentResponse,
   ShipmentResponseSchema,
   type ListShipmentsQuery,
@@ -39,19 +38,8 @@ import {
   TransferResponseSchema,
   type ListShipmentsByIdentifierQuery,
   ListShipmentsByIdentifierQuerySchema,
+  type ModifyShipmentRequest,
 } from '../types/shipments.js'
-
-/**
- * 出荷依頼修正リクエスト
- */
-export const ShipmentModifyRequestSchema = z.object({
-  /** 修正理由（必須） */
-  reason: z.string().min(1).max(500),
-  /** 修正内容 */
-  modifications: UpdateShipmentRequestSchema,
-})
-
-export type ShipmentModifyRequest = z.infer<typeof ShipmentModifyRequestSchema>
 
 /**
  * 出荷依頼一覧を取得
@@ -227,35 +215,33 @@ export async function deleteShipment(client: OpenLogiClient, id: string): Promis
 /**
  * 出荷依頼を修正
  *
- * 既に処理中の出荷依頼に対して修正を加える場合に使用します。
- * 単純な更新とは異なり、修正理由が必要です。
+ * ステータスがピッキング中・ピッキング済み・梱包済みの出荷依頼の修正を依頼します。
+ * データ取り込み後の修正となりますので、別途事務手数料＋作業進捗状況による作業費用がかかります。
  *
  * @param client - OpenLogiクライアント
  * @param id - 出荷依頼ID
- * @param data - 修正データ
+ * @param data - 修正データ（recipient, delivery_time_slot, delivery_dateのいずれか）
  * @returns 修正された出荷依頼情報
  *
  * @example
  * ```typescript
- * const shipment = await modifyShipment(client, '12345', {
- *   reason: '配送先住所の誤りを修正',
- *   modifications: {
- *     delivery_info: {
- *       name: '山田太郎',
- *       postal_code: '1000002',
- *       prefecture: '東京都',
- *       city: '千代田区',
- *       address1: '千代田2-2-2',
- *       phone: '09012345678',
- *     },
+ * const shipment = await modifyShipment(client, 'TS001-S000001', {
+ *   recipient: {
+ *     name: '山田太郎',
+ *     postcode: '1000002',
+ *     prefecture: '東京都',
+ *     address1: '千代田2-2-2',
+ *     phone: '09012345678',
  *   },
+ *   delivery_time_slot: 'AM',
+ *   delivery_date: '2025-02-01',
  * })
  * ```
  */
 export async function modifyShipment(
   client: OpenLogiClient,
   id: string,
-  data: ShipmentModifyRequest,
+  data: ModifyShipmentRequest,
 ): Promise<ShipmentResponse> {
   return request(client, ShipmentResponseSchema, `shipments/${id}/modify`, {
     method: 'POST',
@@ -712,22 +698,20 @@ export async function deleteShipmentByAccountId(
  * @param client - OpenLogiクライアント
  * @param accountId - アカウントコード
  * @param identifier - 識別番号
- * @param data - 修正データ
+ * @param data - 修正データ（recipient, delivery_time_slot, delivery_dateのいずれか）
  * @returns 修正された出荷依頼情報
  *
  * @example
  * ```typescript
  * const shipment = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', {
- *   reason: '配送先住所の誤りを修正',
- *   modifications: {
- *     recipient: {
- *       name: '山田太郎',
- *       postcode: '1000002',
- *       prefecture: '東京都',
- *       address1: '千代田2-2-2',
- *       phone: '09012345678'
- *     }
- *   }
+ *   recipient: {
+ *     name: '山田太郎',
+ *     postcode: '1000002',
+ *     prefecture: '東京都',
+ *     address1: '千代田2-2-2',
+ *     phone: '09012345678'
+ *   },
+ *   delivery_time_slot: 'AM',
  * })
  * ```
  */
@@ -735,7 +719,7 @@ export async function modifyShipmentByAccountId(
   client: OpenLogiClient,
   accountId: string,
   identifier: string,
-  data: ShipmentModifyRequest,
+  data: ModifyShipmentRequest,
 ): Promise<ShipmentResponse> {
   return request(client, ShipmentResponseSchema, `shipments/${accountId}/${identifier}/modify`, {
     method: 'POST',
