@@ -231,23 +231,17 @@ export async function deleteItem(client: OpenLogiClient, id: string): Promise<It
 }
 
 /**
- * 商品画像を登録
+ * Internal helper function for uploading item images
  *
+ * @internal
  * @param client - OpenLogiクライアント
- * @param id - 商品ID
- * @param file - 画像ファイル（File または Blob、jpeg/png形式）
+ * @param endpoint - API endpoint path
+ * @param file - 画像ファイル（File または Blob）
  * @returns 登録された画像情報
- *
- * @example
- * ```typescript
- * const file = new Blob(['...'], { type: 'image/png' })
- * const image = await uploadItemImage(client, '12345', file)
- * console.log(`画像を登録しました: ${image.url}`)
- * ```
  */
-export async function uploadItemImage(
+async function _uploadItemImageInternal(
   client: OpenLogiClient,
-  id: string,
+  endpoint: string,
   file: File | Blob,
 ): Promise<ItemImageResponse> {
   // FormDataを構築（公式ドキュメント通り、nameは'file'）
@@ -259,7 +253,7 @@ export async function uploadItemImage(
   formData.append('file', file, filename)
 
   // kyのHTTPクライアントを直接使用
-  const response = await client.http.post(`items/${id}/images`, {
+  const response = await client.http.post(endpoint, {
     body: formData,
     headers: {
       // Content-Typeを明示的に削除してkyに自動設定させる
@@ -283,6 +277,29 @@ export async function uploadItemImage(
 }
 
 /**
+ * 商品画像を登録
+ *
+ * @param client - OpenLogiクライアント
+ * @param id - 商品ID
+ * @param file - 画像ファイル（File または Blob、jpeg/png形式）
+ * @returns 登録された画像情報
+ *
+ * @example
+ * ```typescript
+ * const file = new Blob(['...'], { type: 'image/png' })
+ * const image = await uploadItemImage(client, '12345', file)
+ * console.log(`画像を登録しました: ${image.url}`)
+ * ```
+ */
+export async function uploadItemImage(
+  client: OpenLogiClient,
+  id: string,
+  file: File | Blob,
+): Promise<ItemImageResponse> {
+  return _uploadItemImageInternal(client, `items/${id}/images`, file)
+}
+
+/**
  * code指定で商品画像を登録
  */
 export async function uploadItemImageByCode(
@@ -291,29 +308,7 @@ export async function uploadItemImageByCode(
   code: string,
   file: File | Blob,
 ): Promise<ItemImageResponse> {
-  const formData = new FormData()
-  const filename = file instanceof File ? file.name : 'image.jpg'
-  formData.append('file', file, filename)
-
-  const response = await client.http.post(`items/${accountId}/${code}/images`, {
-    body: formData,
-    headers: {
-      'Content-Type': undefined,
-    },
-  })
-
-  const json = await response.json()
-  const result = ItemImageResponseSchema.safeParse(json)
-
-  if (!result.success) {
-    throw new ValidationError(
-      `レスポンスの検証に失敗しました: ${result.error.message}`,
-      result.error,
-      result.error,
-    )
-  }
-
-  return result.data
+  return _uploadItemImageInternal(client, `items/${accountId}/${code}/images`, file)
 }
 
 /**
