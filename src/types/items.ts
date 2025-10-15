@@ -11,13 +11,8 @@ import { TemperatureZoneSchema, LotLimitTypeSchema } from './common'
  * 価格スキーマ（リクエスト/レスポンスで数値または数値文字列）
  */
 const ItemPriceSchema = z.union([
-  z
-    .number()
-    .int()
-    .min(0),
-  z
-    .string()
-    .regex(/^\d+$/, { message: 'Price must be a numeric string' }),
+  z.number().int().min(0),
+  z.string().regex(/^\d+$/, { message: 'Price must be a numeric string' }),
 ])
 
 export type ItemPrice = z.infer<typeof ItemPriceSchema>
@@ -67,6 +62,9 @@ export type ChildItem = z.infer<typeof ChildItemSchema>
 
 /**
  * 商品作成リクエストのスキーマ
+ *
+ * Note: .passthrough() を使用して、将来的なAPI拡張に対応しています。
+ * 定義されていないフィールドは検証されませんが、そのままAPIに送信されます。
  */
 export const CreateItemRequestSchema = z
   .object({
@@ -104,7 +102,7 @@ export const CreateItemRequestSchema = z
     /** 製造日の引当可能日数（0以上） */
     manufacture_date_allocatable_days: z.number().int().min(0).optional(),
   })
-  .strict()
+  .passthrough()
 
 export type CreateItemRequest = z.infer<typeof CreateItemRequestSchema>
 

@@ -25,34 +25,21 @@ describe('Items Schemas Validation', () => {
       expect(result.success).toBe(true)
     })
 
-    it('imagesフィールドを含む場合は拒否する（画像は別エンドポイント）', () => {
-      const invalidData = {
+    it('未定義のフィールドを受け入れる（将来の拡張性のため）', () => {
+      const dataWithUnknownFields = {
         code: 'TEST-001',
         images: [{ url: 'https://example.com/image.jpg' }],
-      }
-
-      const result = CreateItemRequestSchema.safeParse(invalidData)
-      expect(result.success).toBe(false)
-    })
-
-    it('item_barcodesフィールドを含む場合は拒否する（レスポンス専用）', () => {
-      const invalidData = {
-        code: 'TEST-001',
         item_barcodes: ['BARCODE-001'],
-      }
-
-      const result = CreateItemRequestSchema.safeParse(invalidData)
-      expect(result.success).toBe(false)
-    })
-
-    it('bundled_itemフィールドを含む場合は拒否する（更新リクエスト専用）', () => {
-      const invalidData = {
-        code: 'TEST-001',
         bundled_item: true,
+        future_field: 'some value',
       }
 
-      const result = CreateItemRequestSchema.safeParse(invalidData)
-      expect(result.success).toBe(false)
+      const result = CreateItemRequestSchema.safeParse(dataWithUnknownFields)
+      expect(result.success).toBe(true)
+      // 未定義のフィールドは検証を通過し、そのまま保持される
+      if (result.success) {
+        expect(result.data).toHaveProperty('future_field', 'some value')
+      }
     })
 
     it('codeが必須である', () => {

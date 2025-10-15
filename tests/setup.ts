@@ -11,6 +11,35 @@ import { beforeAll, afterEach, afterAll } from 'vitest'
 const BASE_URL = 'http://localhost:8080/api'
 
 /**
+ * テスト用のヘルパー関数
+ */
+
+/**
+ * 商品データの基本構造を生成
+ */
+function createMockItem(overrides: {
+  id: string
+  code?: string
+  name?: string
+  price?: string
+  temperature_zone?: string
+  stock?: number
+  created_at?: string
+  updated_at?: string
+}) {
+  return {
+    id: overrides.id,
+    code: overrides.code ?? 'TEST-001',
+    name: overrides.name ?? 'Test Item',
+    price: overrides.price ?? '1000',
+    temperature_zone: overrides.temperature_zone ?? 'dry',
+    stock: overrides.stock ?? 100,
+    created_at: overrides.created_at ?? '2025-01-10T00:00:00Z',
+    updated_at: overrides.updated_at ?? '2025-01-10T00:00:00Z',
+  }
+}
+
+/**
  * モックハンドラー
  * すべてのAPIエンドポイントのモック定義
  */
@@ -27,16 +56,13 @@ export const handlers = [
       )
     }
 
-    const items = id.split(',').map((itemId, index) => ({
-      id: itemId,
-      code: `TEST-${(index + 1).toString().padStart(3, '0')}`,
-      name: `Test Item ${index + 1}`,
-      price: '1000',
-      temperature_zone: 'dry',
-      stock: 100,
-      created_at: '2025-01-10T00:00:00Z',
-      updated_at: '2025-01-10T00:00:00Z',
-    }))
+    const items = id.split(',').map((itemId, index) =>
+      createMockItem({
+        id: itemId,
+        code: `TEST-${(index + 1).toString().padStart(3, '0')}`,
+        name: `Test Item ${index + 1}`,
+      }),
+    )
 
     return HttpResponse.json({
       items,
@@ -74,42 +100,112 @@ export const handlers = [
     })
   }),
 
-  http.get(`${BASE_URL}/items/:id`, ({ request, params }) => {
-    const url = new URL(request.url)
-    const identifier = url.searchParams.get('identifier')
-    const code = url.searchParams.get('code')
+  /**
+   * GET /items/{account_id}/{code} - code指定で商品を取得
+   * 注意: このハンドラーは GET /items/:id よりも先に定義する必要があります
+   */
+  http.get(`${BASE_URL}/items/:accountId/:code`, ({ params }) => {
+    const { accountId: _accountId, code } = params
 
-    if (identifier && code) {
-      return HttpResponse.json({
-        items: [
-          {
-            id: 'item-001',
-            code: code.split(',')[0] ?? 'UNKNOWN',
-            name: 'Account Item',
-            price: '1000',
-            temperature_zone: 'dry',
-            stock: 100,
-            created_at: '2025-01-10T00:00:00Z',
-            updated_at: '2025-01-10T00:00:00Z',
-          },
-        ],
-      })
-    }
-
-    const { id } = params
-    if (id === 'not-found') {
+    // 404エラーのテスト用
+    if (code === 'NOT-FOUND') {
       return HttpResponse.json({ message: '商品が見つかりません' }, { status: 404 })
     }
-    return HttpResponse.json({
-      id: id as string,
-      code: 'TEST-001',
+
+    return HttpResponse.json(
+      createMockItem({
+        id: 'item-by-code',
+        code: code as string,
+        name: `Item ${code}`,
+      }),
+    )
+  }),
+
+  /**
+   * PUT /items/{account_id}/{code} - code指定で商品を更新
+   * 注意: このハンドラーは PUT /items/:id よりも先に定義する必要があります
+   */
+  http.put(`${BASE_URL}/items/:accountId/:code`, async ({ params, request }) => {
+    const { accountId: _accountId, code } = params
+    const body = await request.json()
+
+    const responseBody = {
+      id: 'item-by-code-updated',
+      code: code as string,
       name: 'Test Item',
       price: '1000',
       temperature_zone: 'dry',
       stock: 100,
       created_at: '2025-01-10T00:00:00Z',
-      updated_at: '2025-01-10T00:00:00Z',
-    })
+      updated_at: '2025-01-11T00:00:00Z',
+      ...(body ?? {}),
+    } as Record<string, unknown>
+
+    if (body && typeof body === 'object' && 'price' in body && body.price !== undefined) {
+      responseBody.price = String(body.price)
+    }
+
+    return HttpResponse.json(responseBody)
+  }),
+
+  /**
+   * DELETE /items/{account_id}/{code} - code指定で商品を削除
+   * 注意: このハンドラーは DELETE /items/:id よりも先に定義する必要があります
+   */
+  http.delete(`${BASE_URL}/items/:accountId/:code`, ({ params }) => {
+    const { accountId: _accountId, code } = params
+
+    return HttpResponse.json(
+      createMockItem({
+        id: 'item-by-code-deleted',
+        code: code as string,
+        name: 'Deleted Item',
+        stock: 0,
+        updated_at: '2025-01-11T00:00:00Z',
+      }),
+    )
+  }),
+
+  /**
+   * Items API ハンドラー: GET /items/:id
+   *
+   * このハンドラーは2つの異なるエンドポイントを処理します：
+   * 1. GET /items/{id} - ID指定の単一商品取得
+   * 2. GET /items/{account_id}?identifier=xxx&code=yyy - アカウントID指定の商品一覧取得
+   *
+   * クエリパラメータの有無で処理を分岐します。
+   */
+  http.get(`${BASE_URL}/items/:id`, ({ request, params }) => {
+    const url = new URL(request.url)
+    const identifier = url.searchParams.get('identifier')
+    const code = url.searchParams.get('code')
+
+    // ケース1: GET /items/{account_id}?identifier=xxx&code=yyy
+    // アカウントID指定の商品一覧取得
+    if (identifier && code) {
+      const firstCode = code.split(',')[0] ?? 'UNKNOWN'
+      return HttpResponse.json({
+        items: [
+          createMockItem({
+            id: 'item-001',
+            code: firstCode,
+            name: 'Account Item',
+          }),
+        ],
+      })
+    }
+
+    // ケース2: GET /items/{id}
+    // ID指定の単一商品取得
+    const { id } = params
+
+    // 404エラーのテスト用
+    if (id === 'not-found') {
+      return HttpResponse.json({ message: '商品が見つかりません' }, { status: 404 })
+    }
+
+    // 通常の商品データを返す
+    return HttpResponse.json(createMockItem({ id: id as string }))
   }),
 
   http.put(`${BASE_URL}/items/:id`, async ({ params, request }) => {
@@ -135,16 +231,14 @@ export const handlers = [
   }),
 
   http.delete(`${BASE_URL}/items/:id`, () => {
-    return HttpResponse.json({
-      id: 'item-001',
-      code: 'TEST-001',
-      name: 'Deleted Item',
-      price: '1000',
-      temperature_zone: 'dry',
-      stock: 0,
-      created_at: '2025-01-10T00:00:00Z',
-      updated_at: '2025-01-11T00:00:00Z',
-    })
+    return HttpResponse.json(
+      createMockItem({
+        id: 'item-001',
+        name: 'Deleted Item',
+        stock: 0,
+        updated_at: '2025-01-11T00:00:00Z',
+      }),
+    )
   }),
 
   http.post(`${BASE_URL}/items/:id/images`, async ({ request, params }) => {
@@ -834,88 +928,91 @@ export const handlers = [
   }),
 
   // POST /shipments/:id/modify - ID指定の出荷依頼修正
-  http.post(`${BASE_URL}/shipments/:idOrAccountId/:identifierOrAction/:action?`, async ({ params, request }) => {
-    const { idOrAccountId, identifierOrAction, action } = params
-    const body = await request.json()
+  http.post(
+    `${BASE_URL}/shipments/:idOrAccountId/:identifierOrAction/:action?`,
+    async ({ params, request }) => {
+      const { idOrAccountId, identifierOrAction, action } = params
+      const body = await request.json()
 
-    // 3セグメント（accountId + identifier + action）の場合
-    if (action) {
-      if (action === 'modify') {
+      // 3セグメント（accountId + identifier + action）の場合
+      if (action) {
+        if (action === 'modify') {
+          return HttpResponse.json({
+            id: 'ship-by-identifier-001',
+            identifier: identifierOrAction as string,
+            status: 'PICKING',
+            items: [{ code: 'TEST-001', quantity: 1 }],
+            updated_at: '2025-01-13T00:00:00Z',
+            ...(body && typeof body === 'object' ? body : {}),
+          })
+        } else if (action === 'cancel') {
+          return HttpResponse.json({
+            id: 'ship-by-identifier-001',
+            identifier: identifierOrAction as string,
+            status: 'CANCELLED',
+            items: [{ code: 'TEST-001', quantity: 1 }],
+            cancelled_at: '2025-01-13T00:00:00Z',
+          })
+        }
+      }
+
+      // 2セグメント（ID + action）の場合
+      const idParam = idOrAccountId
+      const actionParam = identifierOrAction
+
+      if (actionParam === 'modify') {
         return HttpResponse.json({
-          id: 'ship-by-identifier-001',
-          identifier: identifierOrAction as string,
-          status: 'PICKING',
-          items: [{ code: 'TEST-001', quantity: 1 }],
-          updated_at: '2025-01-13T00:00:00Z',
+          id: idParam as string,
+          order_no: 'ORDER-001',
+          status: 'PENDING',
+          shipping_date: '2025-01-20',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 1,
+            },
+          ],
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            phone: '0333333333',
+          },
+          created_at: '2025-01-10T00:00:00Z',
+          updated_at: '2025-01-11T00:00:00Z',
           ...(body && typeof body === 'object' ? body : {}),
         })
-      } else if (action === 'cancel') {
+      } else if (actionParam === 'cancel') {
         return HttpResponse.json({
-          id: 'ship-by-identifier-001',
-          identifier: identifierOrAction as string,
+          id: idParam as string,
+          order_no: 'ORDER-001',
           status: 'CANCELLED',
-          items: [{ code: 'TEST-001', quantity: 1 }],
-          cancelled_at: '2025-01-13T00:00:00Z',
+          shipping_date: '2025-01-20',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 1,
+              unit_price: 1000,
+              price: 1000,
+            },
+          ],
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            phone: '0333333333',
+          },
+          created_at: '2025-01-10T00:00:00Z',
+          updated_at: '2025-01-11T00:00:00Z',
+          cancelled_at: '2025-01-11T00:00:00Z',
         })
       }
-    }
 
-    // 2セグメント（ID + action）の場合
-    const idParam = idOrAccountId
-    const actionParam = identifierOrAction
-
-    if (actionParam === 'modify') {
-      return HttpResponse.json({
-        id: idParam as string,
-        order_no: 'ORDER-001',
-        status: 'PENDING',
-        shipping_date: '2025-01-20',
-        items: [
-          {
-            code: 'TEST-001',
-            quantity: 1,
-          },
-        ],
-        recipient: {
-          name: '山田太郎',
-          postcode: '1700013',
-          prefecture: '東京都',
-          address1: '豊島区東池袋1-34-5',
-          phone: '0333333333',
-        },
-        created_at: '2025-01-10T00:00:00Z',
-        updated_at: '2025-01-11T00:00:00Z',
-        ...(body && typeof body === 'object' ? body : {}),
-      })
-    } else if (actionParam === 'cancel') {
-      return HttpResponse.json({
-        id: idParam as string,
-        order_no: 'ORDER-001',
-        status: 'CANCELLED',
-        shipping_date: '2025-01-20',
-        items: [
-          {
-            code: 'TEST-001',
-            quantity: 1,
-            unit_price: 1000,
-            price: 1000,
-          },
-        ],
-        recipient: {
-          name: '山田太郎',
-          postcode: '1700013',
-          prefecture: '東京都',
-          address1: '豊島区東池袋1-34-5',
-          phone: '0333333333',
-        },
-        created_at: '2025-01-10T00:00:00Z',
-        updated_at: '2025-01-11T00:00:00Z',
-        cancelled_at: '2025-01-11T00:00:00Z',
-      })
-    }
-
-    return HttpResponse.json({ message: 'Unknown action' }, { status: 400 })
-  }),
+      return HttpResponse.json({ message: 'Unknown action' }, { status: 400 })
+    },
+  ),
 ]
 
 // モックサーバーをセットアップ
