@@ -852,19 +852,11 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-// 基本的な引当解除（理由なし）
+// 基本的な引当解除
 const shipment = await clearShipmentAllocation(client, '12345')
 
 console.log(`引当を解除しました: ${shipment.id}`)
 console.log(`ステータス: ${shipment.status}`)
-
-// 理由を指定して引当解除
-const shipmentWithReason = await clearShipmentAllocation(client, '67890', {
-  reason: '在庫調整のため引当を解除',
-})
-
-console.log(`引当を解除しました: ${shipmentWithReason.id}`)
-console.log(`理由: 在庫調整のため引当を解除`)
 
 /**
  * 注意事項:

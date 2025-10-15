@@ -720,10 +720,8 @@ describe('Shipments API', () => {
       expect(response.updated_at).toBeDefined()
     })
 
-    it('理由付きで引当を解除できる', async () => {
-      const response = await clearShipmentAllocation(client, 'ship-001', {
-        reason: '在庫調整のため引当を解除',
-      })
+    it('空のボディで引当を解除できる', async () => {
+      const response = await clearShipmentAllocation(client, 'ship-001', {})
 
       expect(response).toMatchObject({
         id: 'ship-001',
@@ -739,12 +737,6 @@ describe('Shipments API', () => {
       )
 
       await expect(clearShipmentAllocation(client, 'not-found')).rejects.toThrow()
-    })
-
-    it('空のボディで引当を解除できる', async () => {
-      const response = await clearShipmentAllocation(client, 'ship-001', {})
-
-      expect(response.id).toBe('ship-001')
     })
   })
 

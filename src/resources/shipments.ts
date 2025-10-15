@@ -406,18 +406,14 @@ export async function getInternationalCurrencies(
  *
  * @param client - OpenLogiクライアント
  * @param id - 出荷依頼ID
- * @param data - 引当解除リクエスト（オプショナル）
+ * @param data - 引当解除リクエスト（オプショナル、空のオブジェクト）
  * @returns 更新された出荷依頼情報
  *
  * @example
  * ```typescript
  * // 基本的な使用法
  * const shipment = await clearShipmentAllocation(client, '12345')
- *
- * // 理由を指定する場合
- * const shipment = await clearShipmentAllocation(client, '12345', {
- *   reason: '在庫調整のため引当を解除',
- * })
+ * console.log(`引当を解除しました: ${shipment.id}`)
  * ```
  */
 export async function clearShipmentAllocation(

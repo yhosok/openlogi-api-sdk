@@ -785,12 +785,9 @@ export type InternationalCurrenciesResponse = z.infer<typeof InternationalCurren
 
 /**
  * 引当解除リクエスト
- * 注意: リクエストボディは空のオブジェクトでも可
+ * 注意: APIはリクエストボディとして空のオブジェクトを期待します
  */
-export const ClearAllocationRequestSchema = z.object({
-  /** 解除理由（オプショナル） */
-  reason: z.string().max(500).optional(),
-})
+export const ClearAllocationRequestSchema = z.object({})
 
 export type ClearAllocationRequest = z.infer<typeof ClearAllocationRequestSchema>
 
