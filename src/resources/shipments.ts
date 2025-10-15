@@ -12,6 +12,7 @@ import {
   type CreateShipmentRequest,
   CreateShipmentRequestSchema,
   type UpdateShipmentRequest,
+  UpdateShipmentRequestSchema,
   type ShipmentResponse,
   ShipmentResponseSchema,
   type ListShipmentsQuery,
@@ -189,9 +190,19 @@ export async function updateShipment(
   id: string,
   data: UpdateShipmentRequest,
 ): Promise<ShipmentResponse> {
+  // Validate request data before sending
+  const result = UpdateShipmentRequestSchema.safeParse(data)
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, ShipmentResponseSchema, `shipments/${id}`, {
     method: 'PUT',
-    json: data,
+    json: result.data,
   })
 }
 
@@ -655,9 +666,19 @@ export async function updateShipmentByAccountId(
   identifier: string,
   data: UpdateShipmentRequest,
 ): Promise<ShipmentResponse> {
+  // Validate request data before sending
+  const result = UpdateShipmentRequestSchema.safeParse(data)
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
   return request(client, ShipmentResponseSchema, `shipments/${accountId}/${identifier}`, {
     method: 'PUT',
-    json: data,
+    json: result.data,
   })
 }
 

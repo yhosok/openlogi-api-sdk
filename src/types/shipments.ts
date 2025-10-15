@@ -283,6 +283,57 @@ export const DeliveryOptionsSchema = z.object({
 export type DeliveryOptions = z.infer<typeof DeliveryOptionsSchema>
 
 /**
+ * Validates recipient and sender information based on the international flag.
+ * This validator is shared between CreateShipmentRequestSchema and UpdateShipmentRequestSchema.
+ *
+ * @param data - The data to validate containing international flag, recipient, and sender
+ * @param ctx - The Zod refinement context for adding validation issues
+ */
+function validateShipmentAddresses(
+  data: {
+    international?: boolean | undefined
+    recipient?: unknown
+    sender?: unknown
+    [key: string]: unknown
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const isInternational = data.international === true
+
+  // Validate recipient based on international flag (only if provided)
+  if (data.recipient !== undefined) {
+    const schema = isInternational
+      ? InternationalRecipientInfoSchema
+      : DomesticRecipientInfoSchema
+    const result = schema.safeParse(data.recipient)
+    if (!result.success) {
+      result.error.issues.forEach((issue) => {
+        ctx.addIssue({
+          ...issue,
+          path: ['recipient', ...issue.path],
+        })
+      })
+    }
+  }
+
+  // Validate sender based on international flag (only if provided)
+  if (data.sender !== undefined) {
+    const schema = isInternational
+      ? InternationalSenderInfoSchema
+      : DomesticSenderInfoSchema
+    const result = schema.safeParse(data.sender)
+    if (!result.success) {
+      result.error.issues.forEach((issue) => {
+        ctx.addIssue({
+          ...issue,
+          path: ['sender', ...issue.path],
+        })
+      })
+    }
+  }
+}
+
+/**
  * 出荷作成リクエストのベーススキーマ
  */
 const CreateShipmentRequestBaseSchema = z.object({
@@ -424,62 +475,18 @@ export const CreateShipmentRequestSchema = CreateShipmentRequestBaseSchema.refin
     message: 'identifierまたはorder_noのいずれかを指定してください',
     path: ['identifier'],
   },
-)
-  /**
-   * Conditional validation based on the international flag:
-   * - domestic shipments (international: false or undefined):
-   *   Use DomesticRecipientInfoSchema and DomesticSenderInfoSchema
-   * - international shipments (international: true):
-   *   Use InternationalRecipientInfoSchema and InternationalSenderInfoSchema
-   *
-   * Validation errors are propagated with proper path information.
-   */
-  .superRefine((data, ctx) => {
-    // Determine if this is an international shipment (default to false)
-    const isInternational = data.international === true
-
-    // Validate recipient based on international flag
-    if (data.recipient) {
-      const schema = isInternational
-        ? InternationalRecipientInfoSchema
-        : DomesticRecipientInfoSchema
-      const result = schema.safeParse(data.recipient)
-      if (!result.success) {
-        result.error.issues.forEach((issue) => {
-          ctx.addIssue({
-            ...issue,
-            path: ['recipient', ...issue.path],
-          })
-        })
-      }
-    }
-
-    // Validate sender based on international flag
-    if (data.sender) {
-      const schema = isInternational ? InternationalSenderInfoSchema : DomesticSenderInfoSchema
-      const result = schema.safeParse(data.sender)
-      if (!result.success) {
-        result.error.issues.forEach((issue) => {
-          ctx.addIssue({
-            ...issue,
-            path: ['sender', ...issue.path],
-          })
-        })
-      }
-    }
-  })
+).superRefine(validateShipmentAddresses)
 
 export type CreateShipmentRequest = z.infer<typeof CreateShipmentRequestSchema>
 
 /**
  * 出荷更新リクエストのスキーマ
  */
-export const UpdateShipmentRequestSchema = CreateShipmentRequestBaseSchema.partial().extend({
-  /** 出荷商品リスト（更新時もitemsを変更する場合は全件指定） */
-  items: z.array(ShipmentItemSchema).min(1).optional(),
-  /** 受取人情報（更新時も変更する場合は全項目指定） */
-  recipient: RecipientInfoSchema.optional(),
-})
+export const UpdateShipmentRequestSchema = CreateShipmentRequestBaseSchema.partial()
+  .extend({
+    /** 出荷商品リスト（更新時もitemsを変更する場合は全件指定） */
+    items: z.array(ShipmentItemSchema).min(1).optional(),
+  }).superRefine(validateShipmentAddresses)
 
 export type UpdateShipmentRequest = z.infer<typeof UpdateShipmentRequestSchema>
 
@@ -777,9 +784,7 @@ export const InternationalCurrenciesResponseSchema = z.object({
   currencies: z.array(InternationalCurrencySchema),
 })
 
-export type InternationalCurrenciesResponse = z.infer<
-  typeof InternationalCurrenciesResponseSchema
->
+export type InternationalCurrenciesResponse = z.infer<typeof InternationalCurrenciesResponseSchema>
 
 /**
  * 引当解除リクエスト

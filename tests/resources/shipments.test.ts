@@ -252,13 +252,16 @@ describe('Shipments API', () => {
     it('バリデーションエラーの場合は422が発生する', async () => {
       server.use(
         http.post(`${BASE_URL}/shipments/bulk`, () => {
-          return HttpResponse.json({
-            error: 'validation_failed',
-            error_description: 'items[1].code must exist',
-            errors: {
-              'shipments.1.items.0.code': ['商品コードが存在しません'],
+          return HttpResponse.json(
+            {
+              error: 'validation_failed',
+              error_description: 'items[1].code must exist',
+              errors: {
+                'shipments.1.items.0.code': ['商品コードが存在しません'],
+              },
             },
-          }, { status: 422 })
+            { status: 422 },
+          )
         }),
       )
 
@@ -342,6 +345,58 @@ describe('Shipments API', () => {
 
       expect(response.recipient?.name).toBe('鈴木一郎')
     })
+
+    it('複数フィールドを同時に更新できる', async () => {
+      const updateData = {
+        shipping_date: '2025-01-30',
+        delivery_carrier: 'SAGAWA',
+        delivery_time_slot: '14',
+        delivery_date: '2025-02-01',
+      }
+
+      const response = await updateShipment(client, 'ship-001', updateData)
+
+      expect(response.shipping_date).toBe('2025-01-30')
+      expect(response.delivery_carrier).toBe('SAGAWA')
+      expect(response.delivery_time_slot).toBe('14')
+      expect(response.delivery_date).toBe('2025-02-01')
+    })
+
+    it('商品情報を更新できる', async () => {
+      const updateData = {
+        items: [
+          { code: 'TEST-001', quantity: 2 },
+          { code: 'TEST-002', quantity: 1 },
+        ],
+      }
+
+      const response = await updateShipment(client, 'ship-001', updateData)
+
+      expect(response.items).toHaveLength(2)
+      expect(response.items[0].quantity).toBe(2)
+      expect(response.items[1].code).toBe('TEST-002')
+    })
+
+    it('国内配送から国際配送に変更できる', async () => {
+      const updateData = {
+        international: true,
+        recipient: {
+          region_code: 'US',
+          postcode: '10001',
+          city: 'New York',
+          address: '123 Main St',
+          name: 'John Doe',
+          phone: '1234567890',
+        },
+        currency_code: 'USD',
+      }
+
+      const response = await updateShipment(client, 'ship-001', updateData)
+
+      expect(response.international).toBe(true)
+      expect(response.recipient?.region_code).toBe('US')
+      expect(response.currency_code).toBe('USD')
+    })
   })
 
   describe('deleteShipment', () => {
@@ -419,6 +474,63 @@ describe('Shipments API', () => {
 
       expect(response.status).toBe('PENDING')
       expect(response.recipient?.name).toBe('田中花子')
+    })
+
+    describe('International shipment modification', () => {
+      it('国際配送の出荷依頼の受取人情報を修正できる', async () => {
+        const modifyData = {
+          recipient: {
+            region_code: 'US',
+            postcode: '10002',
+            city: 'Los Angeles',
+            address: '456 Hollywood Blvd',
+            name: 'Jane Smith',
+            phone: '9876543210',
+          },
+        }
+
+        const response = await modifyShipment(client, 'ship-intl-001', modifyData)
+
+        expect(response.status).toBe('PENDING')
+        expect(response.recipient?.city).toBe('Los Angeles')
+        expect(response.recipient?.address).toBe('456 Hollywood Blvd')
+      })
+
+      it('国際配送の出荷依頼の配送時間帯を修正できる', async () => {
+        const modifyData = {
+          delivery_time_slot: '14',
+        }
+
+        const response = await modifyShipment(client, 'ship-intl-002', modifyData)
+
+        expect(response.status).toBe('PENDING')
+      })
+
+      it('国際配送の出荷依頼で受取人に国内配送の情報を指定するとエラーになる', async () => {
+        server.use(
+          http.post(`${BASE_URL}/shipments/:id/modify`, () => {
+            return HttpResponse.json(
+              {
+                error: 'validation_failed',
+                error_description: 'region_code is required for international shipment',
+              },
+              { status: 422 },
+            )
+          }),
+        )
+
+        await expect(
+          modifyShipment(client, 'ship-intl-003', {
+            recipient: {
+              name: '山田太郎',
+              postcode: '1000001',
+              prefecture: '東京都',
+              address1: '千代田1-1-1',
+              phone: '09012345678',
+            },
+          }),
+        ).rejects.toThrow()
+      })
     })
   })
 
@@ -735,9 +847,7 @@ describe('Shipments API', () => {
           items: [], // 空配列はエラー
         }
 
-        await expect(
-          createTransfer(client, invalidData as any),
-        ).rejects.toThrow(ValidationError)
+        await expect(createTransfer(client, invalidData as any)).rejects.toThrow(ValidationError)
       })
 
       it('バリデーションエラーが発生する（移動元倉庫なし）', async () => {
@@ -746,9 +856,7 @@ describe('Shipments API', () => {
           items: [{ code: 'item-001', quantity: 1 }],
         }
 
-        await expect(
-          createTransfer(client, invalidData as any),
-        ).rejects.toThrow(ValidationError)
+        await expect(createTransfer(client, invalidData as any)).rejects.toThrow(ValidationError)
       })
 
       it('バリデーションエラーが発生する（移動先倉庫なし）', async () => {
@@ -757,9 +865,7 @@ describe('Shipments API', () => {
           items: [{ code: 'item-001', quantity: 1 }],
         }
 
-        await expect(
-          createTransfer(client, invalidData as any),
-        ).rejects.toThrow(ValidationError)
+        await expect(createTransfer(client, invalidData as any)).rejects.toThrow(ValidationError)
       })
 
       it('数量が1以上である必要がある', async () => {
@@ -769,9 +875,7 @@ describe('Shipments API', () => {
           items: [{ code: 'item-001', quantity: 0 }],
         }
 
-        await expect(
-          createTransfer(client, invalidData as any),
-        ).rejects.toThrow(ValidationError)
+        await expect(createTransfer(client, invalidData as any)).rejects.toThrow(ValidationError)
       })
     })
 
@@ -885,6 +989,375 @@ describe('Shipments API', () => {
         await cancelTransfer(client, 'transfer-001')
 
         expect(capturedBody).toEqual({})
+      })
+    })
+  })
+
+  describe('ModifyShipmentRequest Validation', () => {
+    it('受取人情報のバリデーションが機能する（国内配送）', async () => {
+      server.use(
+        http.post(`${BASE_URL}/shipments/:id/modify`, () => {
+          return HttpResponse.json(
+            { error: 'validation_failed', error_description: 'Invalid postcode format' },
+            { status: 422 },
+          )
+        }),
+      )
+
+      await expect(
+        modifyShipment(client, 'ship-001', {
+          recipient: {
+            name: '山田太郎',
+            postcode: '123', // Invalid format
+            prefecture: '東京都',
+            address1: '千代田1-1-1',
+            phone: '09012345678',
+          },
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('無効なdelivery_time_slotを拒否する', async () => {
+      server.use(
+        http.post(`${BASE_URL}/shipments/:id/modify`, () => {
+          return HttpResponse.json(
+            { error: 'validation_failed', error_description: 'Invalid delivery_time_slot' },
+            { status: 422 },
+          )
+        }),
+      )
+
+      await expect(
+        modifyShipment(client, 'ship-001', {
+          delivery_time_slot: 'INVALID' as any,
+        }),
+      ).rejects.toThrow()
+    })
+
+    it('無効なdelivery_date形式を拒否する', async () => {
+      server.use(
+        http.post(`${BASE_URL}/shipments/:id/modify`, () => {
+          return HttpResponse.json(
+            { error: 'validation_failed', error_description: 'Invalid date format' },
+            { status: 422 },
+          )
+        }),
+      )
+
+      await expect(
+        modifyShipment(client, 'ship-001', {
+          delivery_date: '2025/01/25', // Invalid format
+        }),
+      ).rejects.toThrow()
+    })
+  })
+
+  describe('UpdateShipmentRequest Validation', () => {
+    describe('Domestic shipment updates', () => {
+      it('国内配送の受取人情報を正しく更新できる', async () => {
+        const updateData = {
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            phone: '09012345678',
+          },
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+
+      it('国内配送で無効な郵便番号フォーマットを拒否する', async () => {
+        const updateData = {
+          recipient: {
+            name: '山田太郎',
+            postcode: '123', // Invalid: too short
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国内配送で都道府県が必須', async () => {
+        const updateData = {
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            // prefecture is missing
+            address1: '豊島区東池袋1-34-5',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国内配送で住所1が必須', async () => {
+        const updateData = {
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            // address1 is missing
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国内配送の送り主情報を正しく更新できる', async () => {
+        const updateData = {
+          sender: {
+            name: '送り主太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            phone: '0333333333',
+          },
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+
+      it('国内配送の送り主で無効な郵便番号を拒否する', async () => {
+        const updateData = {
+          sender: {
+            name: '送り主太郎',
+            postcode: 'INVALID',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+    })
+
+    describe('International shipment updates', () => {
+      it('国際配送の受取人情報を正しく更新できる', async () => {
+        const updateData = {
+          international: true,
+          recipient: {
+            region_code: 'US',
+            postcode: '10001',
+            city: 'New York',
+            address: '123 Main St',
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+
+      it('国際配送で国コードが必須', async () => {
+        const updateData = {
+          international: true,
+          recipient: {
+            // region_code is missing
+            postcode: '10001',
+            city: 'New York',
+            address: '123 Main St',
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国際配送で都市名が必須', async () => {
+        const updateData = {
+          international: true,
+          recipient: {
+            region_code: 'US',
+            postcode: '10001',
+            // city is missing
+            address: '123 Main St',
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国際配送で住所(address)が必須（address1ではない）', async () => {
+        const updateData = {
+          international: true,
+          recipient: {
+            region_code: 'US',
+            postcode: '10001',
+            city: 'New York',
+            // address is missing, address1 should not be used
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国際配送でaddress1を使用するとエラーになる', async () => {
+        const updateData = {
+          international: true,
+          recipient: {
+            region_code: 'US',
+            postcode: '10001',
+            city: 'New York',
+            address1: '123 Main St', // Should use 'address' not 'address1'
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国際配送の送り主情報を正しく更新できる', async () => {
+        const updateData = {
+          international: true,
+          sender: {
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            name: 'Sender Name',
+            company: 'Test Company',
+            phone: '0333333333',
+          },
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+
+      it('国際配送の送り主でcompanyが必須', async () => {
+        const updateData = {
+          international: true,
+          sender: {
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            name: 'Sender Name',
+            // company is missing (required for international)
+            phone: '0333333333',
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('国際配送の送り主で電話番号が必須', async () => {
+        const updateData = {
+          international: true,
+          sender: {
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+            name: 'Sender Name',
+            company: 'Test Company',
+            // phone is missing (required for international)
+          },
+        }
+
+        await expect(updateShipment(client, 'ship-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+    })
+
+    describe('Optional field validation', () => {
+      it('recipientがundefinedの場合はバリデーションをスキップする', async () => {
+        const updateData = {
+          shipping_date: '2025-01-25',
+          // recipient is undefined - should not trigger validation
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+
+      it('senderがundefinedの場合はバリデーションをスキップする', async () => {
+        const updateData = {
+          shipping_date: '2025-01-25',
+          // sender is undefined - should not trigger validation
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+
+      it('internationalフラグがundefinedの場合はfalse（国内配送）として扱う', async () => {
+        const updateData = {
+          // international is undefined - should default to false (domestic)
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+          },
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response).toBeDefined()
+      })
+    })
+
+    describe('Switching between domestic and international', () => {
+      it('国内配送から国際配送に変更できる', async () => {
+        const updateData = {
+          international: true,
+          recipient: {
+            region_code: 'US',
+            postcode: '10001',
+            city: 'New York',
+            address: '123 Main St',
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+          currency_code: 'USD',
+        }
+
+        const response = await updateShipment(client, 'ship-001', updateData)
+        expect(response.international).toBe(true)
+      })
+
+      it('国際配送から国内配送に変更できる', async () => {
+        const updateData = {
+          international: false,
+          recipient: {
+            name: '山田太郎',
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '豊島区東池袋1-34-5',
+          },
+        }
+
+        const response = await updateShipment(client, 'ship-intl-001', updateData)
+        expect(response.international).toBe(false)
       })
     })
   })
@@ -1413,6 +1886,32 @@ describe('Shipments API', () => {
 
         await expect(createShipment(client, shipmentData)).rejects.toThrow(ValidationError)
       })
+
+      it('国際配送時は送り主のcompanyが必須', async () => {
+        const shipmentData = {
+          order_no: 'ORDER-INTL-013',
+          international: true,
+          items: [{ code: 'TEST-001', quantity: 1 }],
+          recipient: {
+            region_code: 'US',
+            postcode: '10001',
+            city: 'New York',
+            address: '123 Main St',
+            name: 'John Doe',
+            phone: '1234567890',
+          },
+          sender: {
+            postcode: '1700013',
+            prefecture: '東京都',
+            address1: '渋谷区1-1-1',
+            name: 'Sender Name',
+            phone: '0333333333',
+            // Missing company (required for international)
+          },
+        }
+
+        await expect(createShipment(client, shipmentData)).rejects.toThrow(ValidationError)
+      })
     })
   })
 
@@ -1430,9 +1929,9 @@ describe('Shipments API', () => {
 
       it('バリデーションエラーが発生する（空の識別番号）', async () => {
         const { listShipmentsByAccountId } = await import('../../src/resources/shipments')
-        await expect(
-          listShipmentsByAccountId(client, 'TS001', { identifier: '' }),
-        ).rejects.toThrow(ValidationError)
+        await expect(listShipmentsByAccountId(client, 'TS001', { identifier: '' })).rejects.toThrow(
+          ValidationError,
+        )
       })
     })
 
@@ -1454,12 +1953,7 @@ describe('Shipments API', () => {
           shipping_date: '2025-01-25',
         }
 
-        const response = await updateShipmentByAccountId(
-          client,
-          'TS001',
-          '2015-00001',
-          updateData,
-        )
+        const response = await updateShipmentByAccountId(client, 'TS001', '2015-00001', updateData)
 
         expect(response.identifier).toBe('2015-00001')
         expect(response.shipping_date).toBe('2025-01-25')
@@ -1489,12 +1983,7 @@ describe('Shipments API', () => {
           delivery_time_slot: 'AM',
         }
 
-        const response = await modifyShipmentByAccountId(
-          client,
-          'TS001',
-          '2015-00001',
-          modifyData,
-        )
+        const response = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', modifyData)
 
         expect(response.identifier).toBe('2015-00001')
         expect(response.status).toBe('PICKING')
