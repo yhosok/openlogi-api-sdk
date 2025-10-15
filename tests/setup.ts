@@ -47,6 +47,8 @@ export const handlers = [
     const body = await request.json()
     return HttpResponse.json({
       id: 'item-new',
+      code: body && typeof body === 'object' && 'code' in body ? body.code : 'DEFAULT-CODE',
+      name: body && typeof body === 'object' && 'name' in body ? body.name : 'New Item',
       created_at: '2025-01-11T00:00:00Z',
       updated_at: '2025-01-11T00:00:00Z',
       stock: 0,
@@ -56,11 +58,14 @@ export const handlers = [
   }),
 
   http.post(`${BASE_URL}/items/bulk`, async ({ request }) => {
-    const body = (await request.json()) as { items: Array<{ code: string; price?: number | string }> }
+    const body = (await request.json()) as {
+      items: Array<{ code: string; name?: string; price?: number | string }>
+    }
     return HttpResponse.json({
       items: body.items.map((item, index) => ({
         id: `item-bulk-${index}`,
         code: item.code,
+        name: item.name || `Bulk Item ${index + 1}`,
         price: item.price !== undefined ? String(item.price) : undefined,
         created_at: '2025-01-11T00:00:00Z',
         updated_at: '2025-01-11T00:00:00Z',

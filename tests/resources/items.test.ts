@@ -284,6 +284,20 @@ describe('Items API', () => {
         deleteItemImageByCode(client, 'ACC-001', 'CODE-001', 'img-002'),
       ).resolves.not.toThrow()
     })
+
+    it('正しいパスでAPIを呼び出す（/items/{account_id}/{code}/{image_id}）', async () => {
+      let calledPath = ''
+      server.use(
+        http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, ({ request }) => {
+          calledPath = new URL(request.url).pathname
+          return HttpResponse.json({})
+        }),
+      )
+
+      await deleteItemImageByCode(client, 'ACC-001', 'CODE-001', 'img-002')
+
+      expect(calledPath).toBe('/api/items/ACC-001/CODE-001/img-002')
+    })
   })
 
   describe('エラーハンドリング', () => {
