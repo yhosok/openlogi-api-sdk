@@ -81,7 +81,7 @@ export type WarehousingItemBase = z.infer<typeof WarehousingItemBaseSchema>
  */
 export const WarehousingItemWithReceivedSchema = WarehousingItemBaseSchema.extend({
   /** 入荷実績数 */
-  received: z.number().int().min(0),
+  received: z.number().int().min(0).optional(),
 })
 
 export type WarehousingItemWithReceived = z.infer<typeof WarehousingItemWithReceivedSchema>

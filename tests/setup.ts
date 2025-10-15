@@ -427,11 +427,12 @@ export const handlers = [
     if (id === 'not-found') {
       return HttpResponse.json({ message: '入荷依頼が見つかりません' }, { status: 404 })
     }
+    // wh-001はstocked状態として返す（received, lot_items, warehoused_countを含むため）
     return HttpResponse.json({
       id: id as string,
       inspection_type: 'CODE',
       arrival_date: '2025-01-20',
-      status: 'waiting',
+      status: 'stocked',
       shipment_return: false,
       items: [
         {

@@ -149,7 +149,7 @@ describe('Warehousings API', () => {
         id: 'wh-001',
         inspection_type: 'CODE',
         arrival_date: '2025-01-20',
-        status: 'waiting',
+        status: 'stocked',
         shipment_return: false,
       })
       expect(response.items).toHaveLength(1)
@@ -196,6 +196,47 @@ describe('Warehousings API', () => {
 
     it('存在しない入荷依頼はNotFoundErrorを投げる', async () => {
       await expect(getWarehousing(client, 'not-found')).rejects.toThrow()
+    })
+
+    it('waiting状態の入荷依頼はreceivedフィールドが存在しない場合でも取得できる', async () => {
+      // 実際のAPIでは、waiting状態の場合receivedフィールドが存在しないことがある
+      server.use(
+        http.get(`${BASE_URL}/warehousings/:id`, () => {
+          return HttpResponse.json({
+            id: 'wh-waiting',
+            inspection_type: 'CODE',
+            arrival_date: '2025-01-20',
+            status: 'waiting',
+            shipment_return: false,
+            items: [
+              {
+                id: 'item-001',
+                code: 'TEST-001',
+                name: 'テスト商品',
+                quantity: 100,
+                // receivedフィールドなし（waiting状態なので未入荷）
+              },
+            ],
+            created_at: '2025-01-10T00:00:00Z',
+          })
+        }),
+      )
+
+      const response = await getWarehousing(client, 'wh-waiting')
+
+      expect(response).toMatchObject({
+        id: 'wh-waiting',
+        status: 'waiting',
+      })
+      expect(response.items).toHaveLength(1)
+      expect(response.items[0]).toMatchObject({
+        id: 'item-001',
+        code: 'TEST-001',
+        name: 'テスト商品',
+        quantity: 100,
+      })
+      // receivedフィールドはundefinedであるべき
+      expect(response.items[0].received).toBeUndefined()
     })
   })
 
