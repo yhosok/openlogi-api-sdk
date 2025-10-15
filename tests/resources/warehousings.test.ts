@@ -376,6 +376,168 @@ describe('Warehousings API', () => {
 
       expect(response.warehousings).toHaveLength(0)
     })
+
+    describe('入力値バリデーション', () => {
+      describe('yearパラメータのバリデーション', () => {
+        it('year=1899（下限未満）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 1899, 1, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('year=2101（上限超過）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2101, 1, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('yearが小数（2025.5）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025.5, 1, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('yearが負の値でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, -2025, 1, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+      })
+
+      describe('monthパラメータのバリデーション', () => {
+        it('month=0（下限未満）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 0, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('month=13（上限超過）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 13, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('monthが小数（6.5）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 6.5, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('monthが負の値でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, -1, 15)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+      })
+
+      describe('dayパラメータのバリデーション', () => {
+        it('day=0（下限未満）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 1, 0)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('day=32（上限超過）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 1, 32)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('dayが小数（15.5）でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 1, 15.5)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+
+        it('dayが負の値でValidationErrorを投げる', async () => {
+          await expect(getStockedWarehousingByDate(client, 2025, 1, -1)).rejects.toThrow(
+            ValidationError,
+          )
+        })
+      })
+    })
+
+    describe('境界値テスト（成功ケース）', () => {
+      it('year=1900（下限値）で成功する', async () => {
+        const response = await getStockedWarehousingByDate(client, 1900, 1, 15)
+        expect(response.warehousings).toBeDefined()
+      })
+
+      it('year=2100（上限値）で成功する', async () => {
+        const response = await getStockedWarehousingByDate(client, 2100, 1, 15)
+        expect(response.warehousings).toBeDefined()
+      })
+
+      it('month=1（下限値）で成功する', async () => {
+        const response = await getStockedWarehousingByDate(client, 2025, 1, 15)
+        expect(response.warehousings).toBeDefined()
+      })
+
+      it('month=12（上限値）で成功する', async () => {
+        const response = await getStockedWarehousingByDate(client, 2025, 12, 15)
+        expect(response.warehousings).toBeDefined()
+      })
+
+      it('day=1（下限値）で成功する', async () => {
+        const response = await getStockedWarehousingByDate(client, 2025, 1, 1)
+        expect(response.warehousings).toBeDefined()
+      })
+
+      it('day=31（上限値）で成功する', async () => {
+        const response = await getStockedWarehousingByDate(client, 2025, 1, 31)
+        expect(response.warehousings).toBeDefined()
+      })
+    })
+  })
+
+  describe('getStockedWarehousing - クエリパラメータバリデーション', () => {
+    it('不正なdate_beforeフォーマット（"abcd1234"）でValidationErrorを投げる', async () => {
+      await expect(
+        getStockedWarehousing(client, {
+          date_before: 'abcd1234',
+        }),
+      ).rejects.toThrow(ValidationError)
+    })
+
+    it('不正なdate_afterフォーマット（英字混在 "2025ab01"）でValidationErrorを投げる', async () => {
+      await expect(
+        getStockedWarehousing(client, {
+          date_after: '2025ab01',
+        }),
+      ).rejects.toThrow(ValidationError)
+    })
+
+    it('date_beforeが7桁（"2025010"）でValidationErrorを投げる', async () => {
+      await expect(
+        getStockedWarehousing(client, {
+          date_before: '2025010',
+        }),
+      ).rejects.toThrow(ValidationError)
+    })
+
+    it('date_afterが9桁（"202501011"）でValidationErrorを投げる', async () => {
+      await expect(
+        getStockedWarehousing(client, {
+          date_after: '202501011',
+        }),
+      ).rejects.toThrow(ValidationError)
+    })
+
+    it('date_beforeに記号が混在（"2025-01-01"）でValidationErrorを投げる', async () => {
+      await expect(
+        getStockedWarehousing(client, {
+          date_before: '2025-01-01',
+        }),
+      ).rejects.toThrow(ValidationError)
+    })
+
+    it('date_afterが空文字列でValidationErrorを投げる', async () => {
+      await expect(
+        getStockedWarehousing(client, {
+          date_after: '',
+        }),
+      ).rejects.toThrow(ValidationError)
+    })
   })
 
   describe('getWarehousingLabel', () => {
@@ -386,15 +548,19 @@ describe('Warehousings API', () => {
       expect(pdfBlob.size).toBeGreaterThan(0)
     })
 
-    it('PDFの内容が正しい', async () => {
+    it('PDFの内容が正しい（ヘッダー検証）', async () => {
       const pdfBlob = await getWarehousingLabel(client, 'wh-001')
       const arrayBuffer = await pdfBlob.arrayBuffer()
       const uint8Array = new Uint8Array(arrayBuffer)
 
-      // PDFヘッダー "%PDF" をチェック（最初の4バイト）
       expect(uint8Array.length).toBeGreaterThan(0)
-      // バイナリデータが取得できていることを確認
       expect(uint8Array).toBeInstanceOf(Uint8Array)
+
+      // PDFヘッダー "%PDF" をチェック（最初の4バイト: 0x25 0x50 0x44 0x46）
+      expect(uint8Array[0]).toBe(0x25) // '%'
+      expect(uint8Array[1]).toBe(0x50) // 'P'
+      expect(uint8Array[2]).toBe(0x44) // 'D'
+      expect(uint8Array[3]).toBe(0x46) // 'F'
     })
 
     it('存在しない入荷依頼のPDFはエラーを投げる', async () => {
@@ -405,6 +571,367 @@ describe('Warehousings API', () => {
       )
 
       await expect(getWarehousingLabel(client, 'not-found')).rejects.toThrow()
+    })
+  })
+
+  describe('createWarehousing - バリデーション詳細テスト', () => {
+    describe('items配列のバリデーション', () => {
+      it('items配列に重複した商品コードがある場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items: [
+            { code: 'TEST-001', quantity: 100 },
+            { code: 'TEST-002', quantity: 50 },
+            { code: 'TEST-001', quantity: 30 }, // 重複
+          ],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('items配列が26個（上限超過）の場合はValidationErrorを投げる', async () => {
+        const items = Array.from({ length: 26 }, (_, i) => ({
+          code: `TEST-${String(i + 1).padStart(3, '0')}`,
+          quantity: 10,
+        }))
+
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items,
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('items配列が25個ちょうどの場合は成功する', async () => {
+        const items = Array.from({ length: 25 }, (_, i) => ({
+          code: `TEST-${String(i + 1).padStart(3, '0')}`,
+          quantity: 10,
+        }))
+
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items,
+        }
+
+        const response = await createWarehousing(client, warehousingData)
+        expect(response.status).toBe('waiting')
+        expect(response.items).toHaveLength(25)
+      })
+    })
+
+    describe('quantityのバリデーション', () => {
+      it('quantityが999999999を超える場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 1000000000, // 上限超過
+            },
+          ],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('quantityが0以下の場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 0, // 0は不正
+            },
+          ],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('quantityが負の値の場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: -1, // 負の値は不正
+            },
+          ],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('quantityが999999999の場合は成功する', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 999999999, // 上限値
+            },
+          ],
+        }
+
+        const response = await createWarehousing(client, warehousingData)
+        expect(response.status).toBe('waiting')
+        expect(response.items[0].quantity).toBe(999999999)
+      })
+    })
+
+    describe('arrival_timeのバリデーション', () => {
+      it('arrival_time_fromがarrival_time_toより大きい場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          arrival_time_from: 18,
+          arrival_time_to: 10, // fromより小さい
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('arrival_time_fromが23を超える場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          arrival_time_from: 24, // 上限超過
+          arrival_time_to: 23,
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('arrival_time_toが負の値の場合はValidationErrorを投げる', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          arrival_time_from: 10,
+          arrival_time_to: -1, // 負の値
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        await expect(createWarehousing(client, warehousingData)).rejects.toThrow(ValidationError)
+      })
+
+      it('arrival_time_fromとarrival_time_toが同じ値の場合は成功する', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          arrival_time_from: 14,
+          arrival_time_to: 14, // 同じ値
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        const response = await createWarehousing(client, warehousingData)
+        expect(response.status).toBe('waiting')
+        expect(response.arrival_time_from).toBe(14)
+        expect(response.arrival_time_to).toBe(14)
+      })
+
+      it('arrival_time_fromが0の場合は成功する', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          arrival_time_from: 0, // 最小値
+          arrival_time_to: 10,
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        const response = await createWarehousing(client, warehousingData)
+        expect(response.status).toBe('waiting')
+        expect(response.arrival_time_from).toBe(0)
+      })
+
+      it('arrival_time_toが23の場合は成功する', async () => {
+        const warehousingData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-25',
+          arrival_time_from: 10,
+          arrival_time_to: 23, // 最大値
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        const response = await createWarehousing(client, warehousingData)
+        expect(response.status).toBe('waiting')
+        expect(response.arrival_time_to).toBe(23)
+      })
+    })
+  })
+
+  describe('updateWarehousing - バリデーション詳細テスト', () => {
+    describe('items配列のバリデーション', () => {
+      it('items配列に重複した商品コードがある場合はValidationErrorを投げる', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          items: [
+            { code: 'TEST-001', quantity: 100 },
+            { code: 'TEST-002', quantity: 50 },
+            { code: 'TEST-001', quantity: 30 }, // 重複
+          ],
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('items配列が26個（上限超過）の場合はValidationErrorを投げる', async () => {
+        const items = Array.from({ length: 26 }, (_, i) => ({
+          code: `TEST-${String(i + 1).padStart(3, '0')}`,
+          quantity: 10,
+        }))
+
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          items,
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('items配列が25個ちょうどの場合は成功する', async () => {
+        const items = Array.from({ length: 25 }, (_, i) => ({
+          code: `TEST-${String(i + 1).padStart(3, '0')}`,
+          quantity: 10,
+        }))
+
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          items,
+        }
+
+        const response = await updateWarehousing(client, 'wh-001', updateData)
+        expect(response.id).toBe('wh-001')
+        expect(response.items).toHaveLength(25)
+      })
+    })
+
+    describe('quantityのバリデーション', () => {
+      it('quantityが999999999を超える場合はValidationErrorを投げる', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 1000000000, // 上限超過
+            },
+          ],
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('quantityが0以下の場合はValidationErrorを投げる', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 0, // 0は不正
+            },
+          ],
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('quantityが999999999の場合は成功する', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          items: [
+            {
+              code: 'TEST-001',
+              quantity: 999999999, // 上限値
+            },
+          ],
+        }
+
+        const response = await updateWarehousing(client, 'wh-001', updateData)
+        expect(response.id).toBe('wh-001')
+        expect(response.items[0].quantity).toBe(999999999)
+      })
+    })
+
+    describe('arrival_timeのバリデーション', () => {
+      it('arrival_time_fromがarrival_time_toより大きい場合はValidationErrorを投げる', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          arrival_time_from: 18,
+          arrival_time_to: 10, // fromより小さい
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('arrival_time_fromが23を超える場合はValidationErrorを投げる', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          arrival_time_from: 24, // 上限超過
+          arrival_time_to: 23,
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('arrival_time_toが負の値の場合はValidationErrorを投げる', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          arrival_time_from: 10,
+          arrival_time_to: -1, // 負の値
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        await expect(updateWarehousing(client, 'wh-001', updateData)).rejects.toThrow(
+          ValidationError,
+        )
+      })
+
+      it('arrival_time_fromとarrival_time_toが同じ値の場合は成功する', async () => {
+        const updateData = {
+          inspection_type: 'CODE' as const,
+          arrival_date: '2025-01-26',
+          arrival_time_from: 14,
+          arrival_time_to: 14, // 同じ値
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }
+
+        const response = await updateWarehousing(client, 'wh-001', updateData)
+        expect(response.id).toBe('wh-001')
+        expect(response.arrival_time_from).toBe(14)
+        expect(response.arrival_time_to).toBe(14)
+      })
     })
   })
 

@@ -115,7 +115,20 @@ const CreateWarehousingRequestBaseSchema = z.object({
   /** 検品タイプ（必須） */
   inspection_type: InspectionTypeSchema,
   /** 入荷商品リスト（必須、1-25個） */
-  items: z.array(WarehousingItemSchema).min(1).max(25),
+  items: z
+    .array(WarehousingItemSchema)
+    .min(1)
+    .max(25)
+    .refine(
+      (items) => {
+        const codes = items.map((item) => item.code)
+        return codes.length === new Set(codes).size
+      },
+      {
+        message: 'items must not contain duplicate product codes',
+        path: ['items'],
+      },
+    ),
   /** 入荷予定日（必須） */
   arrival_date: DateStringSchema,
   /** 入荷予定日確定フラグ */
@@ -319,6 +332,22 @@ export const StockedWarehousingQuerySchema = z.object({
 })
 
 export type StockedWarehousingQuery = z.infer<typeof StockedWarehousingQuerySchema>
+
+/**
+ * 指定年月日の入荷実績取得パラメータ
+ */
+export const GetStockedWarehousingByDateParamsSchema = z.object({
+  /** 年（1900-2100の整数） */
+  year: z.number().int().min(1900).max(2100),
+  /** 月（1-12の整数） */
+  month: z.number().int().min(1).max(12),
+  /** 日（1-31の整数、オプショナル） */
+  day: z.number().int().min(1).max(31).optional(),
+})
+
+export type GetStockedWarehousingByDateParams = z.infer<
+  typeof GetStockedWarehousingByDateParamsSchema
+>
 
 /**
  * 入荷実績レスポンス

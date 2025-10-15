@@ -22,6 +22,7 @@ import {
   StockedWarehousingQuerySchema,
   type StockedWarehousingResponse,
   StockedWarehousingResponseSchema,
+  GetStockedWarehousingByDateParamsSchema,
 } from '../types/warehousings.js'
 
 /**
@@ -184,7 +185,20 @@ export async function getStockedWarehousing(
   client: OpenLogiClient,
   query?: StockedWarehousingQuery,
 ): Promise<StockedWarehousingResponse> {
-  const validatedQuery = query ? StockedWarehousingQuerySchema.parse(query) : undefined
+  let validatedQuery: StockedWarehousingQuery | undefined
+
+  if (query) {
+    const result = StockedWarehousingQuerySchema.safeParse(query)
+    if (!result.success) {
+      throw new ValidationError(
+        `リクエストの検証に失敗しました: ${result.error.message}`,
+        result.error,
+        result.error,
+      )
+    }
+    validatedQuery = result.data
+  }
+
   return request(client, StockedWarehousingResponseSchema, 'warehousings/stocked', {
     method: 'GET',
     searchParams: validatedQuery,
@@ -195,10 +209,11 @@ export async function getStockedWarehousing(
  * 指定年月日（または年月）の入荷実績を取得
  *
  * @param client - OpenLogiクライアント
- * @param year - 年
- * @param month - 月
- * @param day - 日（オプショナル、指定しない場合は年月のみで取得）
+ * @param year - 年（1900-2100の整数）
+ * @param month - 月（1-12の整数）
+ * @param day - 日（1-31の整数、オプショナル、指定しない場合は年月のみで取得）
  * @returns 指定日の入荷実績リスト
+ * @throws {ValidationError} パラメータが不正な場合
  *
  * @example
  * ```typescript
@@ -215,10 +230,21 @@ export async function getStockedWarehousingByDate(
   month: number,
   day?: number,
 ): Promise<StockedWarehousingResponse> {
+  const result = GetStockedWarehousingByDateParamsSchema.safeParse({ year, month, day })
+  if (!result.success) {
+    throw new ValidationError(
+      `リクエストの検証に失敗しました: ${result.error.message}`,
+      result.error,
+      result.error,
+    )
+  }
+
+  const { year: validYear, month: validMonth, day: validDay } = result.data
+
   const path =
-    day !== undefined
-      ? `warehousings/stocked/${year}/${month}/${day}`
-      : `warehousings/stocked/${year}/${month}`
+    validDay !== undefined
+      ? `warehousings/stocked/${validYear}/${validMonth}/${validDay}`
+      : `warehousings/stocked/${validYear}/${validMonth}`
 
   return request(client, StockedWarehousingResponseSchema, path, {
     method: 'GET',
