@@ -35,11 +35,11 @@ export const LotItemSchema = z.object({
   /** ロットID */
   id: z.string(),
   /** 賞味期限 */
-  expiry_at: z.string().nullable().optional(),
+  expiry_at: z.string().nullish(),
   /** 製造日 */
-  manufacture_date: z.string().nullable().optional(),
+  manufacture_date: z.string().nullish(),
   /** ロット引当可能日 */
-  lot_allocatable_at: z.string().nullable().optional(),
+  lot_allocatable_at: z.string().nullish(),
   /** 入荷実績数 */
   received: z.number().int().min(0),
 })
@@ -190,63 +190,63 @@ export const WarehousingResponseSchema = z.object({
   /** 入荷予定日 */
   arrival_date: z.string(),
   /** 入荷予定日確定フラグ */
-  arrival_date_confirmed: z.boolean().optional(),
+  arrival_date_confirmed: z.boolean().nullish(),
   /** 入荷時間帯（開始時刻） */
-  arrival_time_from: z.number().int().optional(),
+  arrival_time_from: z.number().int().nullish(),
   /** 入荷時間帯（終了時刻） */
-  arrival_time_to: z.number().int().optional(),
+  arrival_time_to: z.number().int().nullish(),
   /** 販売方法 */
-  sales_method: SalesMethodSchema.optional(),
+  sales_method: SalesMethodSchema.nullish(),
   /** 出荷予定日 */
-  shipping_scheduled_date: z.string().optional(),
+  shipping_scheduled_date: z.string().nullish(),
   /** 輸送方法 */
-  transport_mode: TransportModeSchema.optional(),
+  transport_mode: TransportModeSchema.nullish(),
   /** 識別タイプ */
-  identity_type: IdentityTypeSchema.optional(),
+  identity_type: IdentityTypeSchema.nullish(),
   /** 識別値リスト */
-  identity_values: z.array(z.string()).optional(),
+  identity_values: z.array(z.string()).nullish(),
   /** 追跡コードリスト */
-  tracking_codes: z.array(z.string()).optional(),
+  tracking_codes: z.array(z.string()).nullish(),
   /** 車両コード */
-  vehicle_code: z.string().optional(),
+  vehicle_code: z.string().nullish(),
   /** 車両サイズ */
-  vehicle_size: VehicleSizeSchema.optional(),
+  vehicle_size: VehicleSizeSchema.nullish(),
   /** 運搬方法 */
-  carrying_method: CarryingMethodSchema.optional(),
+  carrying_method: CarryingMethodSchema.nullish(),
   /** コンテナ番号 */
-  container_no: z.string().optional(),
+  container_no: z.string().nullish(),
   /** ドライバー情報 */
-  driver_info: z.string().optional(),
+  driver_info: z.string().nullish(),
   /** 会社メモ */
-  company_memo: z.string().optional(),
+  company_memo: z.string().nullish(),
   /** 識別子 */
-  identifier: z.string().optional(),
+  identifier: z.string().nullish(),
   /** 倉庫コード */
-  warehouse: z.string().optional(),
+  warehouse: z.string().nullish(),
   /** 倉庫情報 */
   warehouse_info: z
     .object({
-      postcode: z.string().optional(),
-      address: z.string().optional(),
-      name: z.string().optional(),
+      postcode: z.string().nullish(),
+      address: z.string().nullish(),
+      name: z.string().nullish(),
     })
-    .optional(),
+    .nullish(),
   /** 作成ユーザー */
   create_user: z
     .object({
       name: z.string(),
     })
-    .optional(),
+    .nullish(),
   /** 在庫期限日 */
-  stock_deadline_date: z.string().optional(),
+  stock_deadline_date: z.string().nullish(),
   /** 検品タイプラベル */
-  inspection_type_label: z.string().optional(),
+  inspection_type_label: z.string().nullish(),
   /** 中間フラグ */
-  halfway: z.boolean().optional(),
+  halfway: z.boolean().nullish(),
   /** 作成日時 */
-  created_at: z.string().optional(),
+  created_at: z.string().nullish(),
   /** 返品入荷フラグ */
-  shipment_return: z.boolean().optional(),
+  shipment_return: z.boolean().nullish(),
 })
 
 export type WarehousingResponse = z.infer<typeof WarehousingResponseSchema>

@@ -164,11 +164,29 @@ async function createErrorFromResponse(error: KyHTTPError): Promise<OpenLogiErro
     case 400:
     case 422: {
       // バリデーションエラー
-      const message = `バリデーションエラー: ${
-        responseBody && typeof responseBody === 'object' && 'message' in responseBody
-          ? responseBody.message
-          : 'リクエストデータが不正です'
-      }`
+      let message = 'バリデーションエラー: '
+
+      // エラーの詳細を取得
+      if (responseBody && typeof responseBody === 'object') {
+        if ('errors' in responseBody && typeof responseBody.errors === 'object') {
+          // エラー詳細がある場合は含める
+          const errorDetails = Object.entries(responseBody.errors as Record<string, unknown>)
+            .map(([field, messages]) => {
+              if (Array.isArray(messages)) {
+                return `${field}: ${messages.join(', ')}`
+              }
+              return `${field}: ${String(messages)}`
+            })
+            .join('; ')
+          message += errorDetails
+        } else if ('message' in responseBody) {
+          message += String(responseBody.message)
+        } else {
+          message += 'リクエストデータが不正です'
+        }
+      } else {
+        message += 'リクエストデータが不正です'
+      }
 
       // 簡易的なZodErrorフォーマットに変換
       const zodErrorFormat = {

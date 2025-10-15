@@ -73,7 +73,7 @@ export const CreateItemRequestSchema = z.object({
   /** 商品名（最大255文字） */
   name: z.string().max(255).optional(),
   /** 軽減税率対象 */
-  is_reduced_tax: z.boolean().optional(),
+  is_reduced_tax: z.boolean().nullish(),
   /** HSコード（パターン: ^\d{4}\.?\d{2}((\.|-)?\d{3,4})?$） */
   hs_code: z
     .string()
@@ -85,8 +85,6 @@ export const CreateItemRequestSchema = z.object({
   barcode: z.string().max(30).optional(),
   /** 商品バーコードリスト */
   item_barcodes: z.array(z.string()).optional(),
-  /** 商品説明 */
-  description: z.string().optional(),
   /** 国際情報 */
   international_info: ItemInternationalInfoSchema.optional(),
   /** 商品画像リスト */
@@ -106,7 +104,7 @@ export const CreateItemRequestSchema = z.object({
   /** 製造日の引当可能日数（0以上） */
   manufacture_date_allocatable_days: z.number().int().min(0).optional(),
   /** 同梱物フラグ */
-  bundled_item: z.boolean().nullable().optional(),
+  bundled_item: z.boolean().nullish(),
 })
 
 export type CreateItemRequest = z.infer<typeof CreateItemRequestSchema>
@@ -132,15 +130,13 @@ export const ItemResponseSchema = z.object({
   /** 価格 */
   price: ItemPriceSchema.optional(),
   /** 軽減税率対象 */
-  is_reduced_tax: z.boolean().optional(),
+  is_reduced_tax: z.boolean().nullish(),
   /** HSコード */
   hs_code: z.string().optional(),
   /** バーコード */
   barcode: z.string().optional(),
   /** 商品バーコードリスト */
   item_barcodes: z.array(z.string()).optional(),
-  /** 商品説明 */
-  description: z.string().optional(),
   /** 国際情報 */
   international_info: ItemInternationalInfoSchema.optional(),
   /** 商品画像リスト */
@@ -160,7 +156,7 @@ export const ItemResponseSchema = z.object({
   /** 製造日の引当可能日数 */
   manufacture_date_allocatable_days: z.number().int().optional(),
   /** 同梱物フラグ */
-  bundled_item: z.boolean().nullable().optional(),
+  bundled_item: z.boolean().nullish(),
   /** 在庫数（レスポンスのみ） */
   stock: z.number().optional(),
   /** 作成日時 */

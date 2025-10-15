@@ -1,0 +1,20 @@
+{
+  "name": "openlogi-sdk-examples",
+  "version": "1.0.0",
+  "description": "OpenLogi API SDK usage examples",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "basic": "tsx basic-usage.ts",
+    "workflow": "tsx complete-workflow.ts",
+    "errors": "tsx error-handling.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "openlogi-api-sdk": "file:.."
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.7.0"
+  }
+}
