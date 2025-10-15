@@ -42,12 +42,13 @@ describe('Warehousings API', () => {
         shipment_return: false,
       })
       expect(response.warehousings[0].items).toHaveLength(1)
-      // レスポンスのitemsにはid, code, name, quantityが含まれる
+      // 一覧取得時はreceivedフィールドを含む
       expect(response.warehousings[0].items[0]).toMatchObject({
         id: 'item-001',
         code: 'TEST-001',
         name: 'テスト商品',
         quantity: 100,
+        received: 0,
       })
       expect(response.warehousings[0].warehouse).toBe('warehouse-1')
       expect(response.warehousings[0].warehouse_info).toBeDefined()
@@ -88,6 +89,8 @@ describe('Warehousings API', () => {
       })
       expect(response.items).toHaveLength(1)
       expect(response.created_at).toBeDefined()
+      // POST時はshipment_returnフィールドが含まれない
+      expect(response).not.toHaveProperty('shipment_return')
     })
 
     it('複数商品の入荷依頼を作成できる', async () => {
@@ -216,6 +219,8 @@ describe('Warehousings API', () => {
         arrival_date: '2025-01-26',
       })
       expect(response.items[0].quantity).toBe(150)
+      // PUT時はshipment_returnフィールドが含まれない
+      expect(response).not.toHaveProperty('shipment_return')
     })
 
     it('必須フィールドが欠けているとバリデーションエラーになる', async () => {
@@ -235,6 +240,8 @@ describe('Warehousings API', () => {
       expect(response.id).toBe('wh-001')
       expect(response.status).toBe('waiting')
       expect(response.items).toHaveLength(1)
+      // DELETE時はshipment_returnフィールドが含まれない
+      expect(response).not.toHaveProperty('shipment_return')
     })
 
     it('存在しない入荷依頼の削除はエラーを投げる', async () => {
@@ -335,6 +342,20 @@ describe('Warehousings API', () => {
       expect(response).not.toHaveProperty('retrieved_at')
     })
 
+    it('年月のみ指定して入荷実績を取得できる', async () => {
+      const response = await getStockedWarehousingByDate(client, 2025, 1)
+
+      expect(response.warehousings).toHaveLength(1)
+      expect(response.warehousings[0]).toMatchObject({
+        id: 'wh-stocked-date',
+        status: 'stocked',
+        shipment_return: false,
+      })
+      expect(response.warehousings[0].items[0]).toHaveProperty('received')
+      expect(response.warehousings[0].items[0]).toHaveProperty('warehoused_count')
+      expect(response).not.toHaveProperty('retrieved_at')
+    })
+
     it('異なる日付で取得できる', async () => {
       const response = await getStockedWarehousingByDate(client, 2025, 2, 10)
 
@@ -344,7 +365,7 @@ describe('Warehousings API', () => {
 
     it('実績がない日付の場合', async () => {
       server.use(
-        http.get(`${BASE_URL}/warehousings/stocked/:year/:month/:day`, () => {
+        http.get(`${BASE_URL}/warehousings/stocked/:year/:month/:day?`, () => {
           return HttpResponse.json({
             warehousings: [],
           })

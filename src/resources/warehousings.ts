@@ -192,33 +192,37 @@ export async function getStockedWarehousing(
 }
 
 /**
- * 指定年月日の入荷実績を取得
+ * 指定年月日（または年月）の入荷実績を取得
  *
  * @param client - OpenLogiクライアント
  * @param year - 年
  * @param month - 月
- * @param day - 日
+ * @param day - 日（オプショナル、指定しない場合は年月のみで取得）
  * @returns 指定日の入荷実績リスト
  *
  * @example
  * ```typescript
+ * // 年月日を指定
  * const stocked = await getStockedWarehousingByDate(client, 2025, 1, 20)
+ *
+ * // 年月のみを指定
+ * const stockedByMonth = await getStockedWarehousingByDate(client, 2025, 1)
  * ```
  */
 export async function getStockedWarehousingByDate(
   client: OpenLogiClient,
   year: number,
   month: number,
-  day: number,
+  day?: number,
 ): Promise<StockedWarehousingResponse> {
-  return request(
-    client,
-    StockedWarehousingResponseSchema,
-    `warehousings/stocked/${year}/${month}/${day}`,
-    {
-      method: 'GET',
-    },
-  )
+  const path =
+    day !== undefined
+      ? `warehousings/stocked/${year}/${month}/${day}`
+      : `warehousings/stocked/${year}/${month}`
+
+  return request(client, StockedWarehousingResponseSchema, path, {
+    method: 'GET',
+  })
 }
 
 /**

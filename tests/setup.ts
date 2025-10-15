@@ -200,6 +200,7 @@ export const handlers = [
   }),
 
   // 入荷API
+  // GET /warehousings - 一覧取得（shipment_return + receivedを含む）
   http.get(`${BASE_URL}/warehousings`, () => {
     return HttpResponse.json({
       warehousings: [
@@ -215,6 +216,7 @@ export const handlers = [
               code: 'TEST-001',
               name: 'テスト商品',
               quantity: 100,
+              received: 0,
             },
           ],
           warehouse: 'warehouse-1',
@@ -235,6 +237,7 @@ export const handlers = [
     })
   }),
 
+  // POST /warehousings - 入荷作成（shipment_returnなし）
   http.post(`${BASE_URL}/warehousings`, async ({ request }) => {
     const body = await request.json()
     return HttpResponse.json({
@@ -254,6 +257,7 @@ export const handlers = [
     })
   }),
 
+  // GET /warehousings/stocked - 入荷実績一覧（shipment_return + 詳細itemsを含む）
   http.get(`${BASE_URL}/warehousings/stocked`, () => {
     return HttpResponse.json({
       warehousings: [
@@ -280,14 +284,20 @@ export const handlers = [
     })
   }),
 
-  http.get(`${BASE_URL}/warehousings/stocked/:year/:month/:day`, ({ params }) => {
+  // GET /warehousings/stocked/:year/:month/:day - 指定年月日の入荷実績（shipment_return + 詳細itemsを含む）
+  // year, monthのみでも取得可能（dayは任意）
+  http.get(`${BASE_URL}/warehousings/stocked/:year/:month/:day?`, ({ params }) => {
     const { year, month, day } = params
+    const dateStr = day
+      ? `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      : `${year}-${String(month).padStart(2, '0')}-01`
+
     return HttpResponse.json({
       warehousings: [
         {
           id: 'wh-stocked-date',
           inspection_type: 'CODE',
-          arrival_date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+          arrival_date: dateStr,
           status: 'stocked',
           shipment_return: false,
           items: [
@@ -301,7 +311,7 @@ export const handlers = [
             },
           ],
           created_at: '2025-01-10T00:00:00Z',
-          stocked_at: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T10:00:00Z`,
+          stocked_at: `${dateStr}T10:00:00Z`,
         },
       ],
     })
@@ -317,6 +327,7 @@ export const handlers = [
     })
   }),
 
+  // GET /warehousings/:id - 入荷詳細取得（shipment_return + 詳細itemsを含む）
   http.get(`${BASE_URL}/warehousings/:id`, ({ params }) => {
     const { id } = params
     if (id === 'not-found') {
@@ -357,6 +368,7 @@ export const handlers = [
     })
   }),
 
+  // PUT /warehousings/:id - 入荷更新（shipment_returnなし）
   http.put(`${BASE_URL}/warehousings/:id`, async ({ params, request }) => {
     const { id } = params
     const body = await request.json()
@@ -390,6 +402,7 @@ export const handlers = [
     })
   }),
 
+  // DELETE /warehousings/:id - 入荷削除（shipment_returnなし）
   http.delete(`${BASE_URL}/warehousings/:id`, ({ params }) => {
     const { id } = params
     return HttpResponse.json(
