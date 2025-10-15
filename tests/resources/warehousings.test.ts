@@ -16,7 +16,12 @@ import {
   getStockedWarehousingByDate,
   getWarehousingLabel,
 } from '../../src/resources/warehousings'
-import { ValidationError } from '../../src/errors'
+import {
+  ValidationError,
+  RateLimitError,
+  AuthenticationError,
+  NotFoundError,
+} from '../../src/errors'
 
 const BASE_URL = 'http://localhost:8080/api'
 
@@ -1007,6 +1012,139 @@ describe('Warehousings API', () => {
       )
 
       await expect(listWarehousing(client)).rejects.toThrow(ValidationError)
+    })
+
+    describe('Rate Limit Errors (429)', () => {
+      it('listWarehousing should handle rate limit errors', async () => {
+        // Create a client with no retries to avoid timeout in tests
+        const noRetryClient = createClient({
+          apiToken: 'test-token',
+          retry: 0,
+        })
+
+        server.use(
+          http.get(`${BASE_URL}/warehousings`, () => {
+            return HttpResponse.json(
+              { error: 'Too Many Attempts.', error_description: 'Too Many Attempts.' },
+              {
+                status: 429,
+                headers: {
+                  'X-RateLimit-Limit': '60',
+                  'X-RateLimit-Remaining': '0',
+                  'Retry-After': '60',
+                },
+              },
+            )
+          }),
+        )
+
+        const error = await listWarehousing(noRetryClient).catch((e) => e)
+        expect(error).toBeInstanceOf(RateLimitError)
+        expect(error.statusCode).toBe(429)
+        expect(error.retryAfter).toBe(60)
+      })
+    })
+
+    describe('Unauthorized Errors (401)', () => {
+      it('getWarehousing should handle authentication errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(getWarehousing(client, 'wh-001')).rejects.toThrow(AuthenticationError)
+      })
+
+      it('updateWarehousing should handle authentication errors', async () => {
+        server.use(
+          http.put(`${BASE_URL}/warehousings/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(
+          updateWarehousing(client, 'wh-001', {
+            inspection_type: 'CODE',
+            arrival_date: '2025-01-26',
+            items: [{ code: 'TEST-001', quantity: 150 }],
+          }),
+        ).rejects.toThrow(AuthenticationError)
+      })
+
+      it('deleteWarehousing should handle authentication errors', async () => {
+        server.use(
+          http.delete(`${BASE_URL}/warehousings/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(deleteWarehousing(client, 'wh-001')).rejects.toThrow(AuthenticationError)
+      })
+    })
+
+    describe('Not Found Errors (404)', () => {
+      it('listWarehousing should handle not found when no warehousings exist', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings`, () => {
+            return HttpResponse.json(
+              { error: 'Not Found', error_description: 'No warehousings found' },
+              { status: 404 },
+            )
+          }),
+        )
+
+        await expect(listWarehousing(client)).rejects.toThrow(NotFoundError)
+      })
+
+      it('getStockedWarehousing should handle not found errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings/stocked`, () => {
+            return HttpResponse.json(
+              { error: 'Not Found', error_description: 'No stocked warehousings found' },
+              { status: 404 },
+            )
+          }),
+        )
+
+        await expect(getStockedWarehousing(client)).rejects.toThrow(NotFoundError)
+      })
+    })
+
+    describe('Validation Errors (422)', () => {
+      it('updateWarehousing should handle validation errors from API', async () => {
+        server.use(
+          http.put(`${BASE_URL}/warehousings/:id`, () => {
+            return HttpResponse.json(
+              {
+                error: 'validation_failed',
+                error_description: 'Invalid arrival date format',
+                errors: {
+                  arrival_date: ['Date must be in YYYY-MM-DD format'],
+                },
+              },
+              { status: 422 },
+            )
+          }),
+        )
+
+        await expect(
+          updateWarehousing(client, 'wh-001', {
+            inspection_type: 'CODE',
+            arrival_date: '2025/01/26',
+            items: [{ code: 'TEST-001', quantity: 150 }],
+          }),
+        ).rejects.toThrow()
+      })
     })
   })
 })

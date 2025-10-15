@@ -266,14 +266,21 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-// identifierまたはcodeで商品一覧を取得
-const response = await listItemsByAccountId(client, 'account-123', {
-  identifier: '2015-00001,2015-00002',  // 商品識別番号（必須）
-  code: 'ITEM-001,ITEM-002',            // 商品コード（必須）
+// パターン1: 商品識別番号で取得
+const response1 = await listItemsByAccountId(client, 'account-123', {
+  identifier: '2015-00001,2015-00002',  // 商品識別番号（identifier または code のいずれか必須）
   stock: 1,                              // 在庫情報を含める（任意）
 })
 
-console.log(`取得した商品数: ${response.items.length}`)
+console.log(`取得した商品数: ${response1.items.length}`)
+
+// パターン2: 商品コードで取得
+const response2 = await listItemsByAccountId(client, 'account-123', {
+  code: 'ITEM-001,ITEM-002',            // 商品コード（identifier または code のいずれか必須）
+  stock: 1,                              // 在庫情報を含める（任意）
+})
+
+console.log(`取得した商品数: ${response2.items.length}`)
 ```
 
 #### 商品コードで画像を登録
@@ -729,6 +736,142 @@ const client = createClient({
 const transfer = await cancelTransfer(client, 'TS001-S000001')
 
 console.log(`倉庫移動をキャンセルしました: ${transfer.status}`)
+```
+
+#### 出荷実績一覧を取得
+
+```typescript
+import { createClient, listShippedShipments } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// 全ての出荷実績を取得
+const response = await listShippedShipments(client)
+
+console.log(`出荷実績数: ${response.shipments.length}件`)
+
+// 出荷実績の詳細を表示
+response.shipments.forEach((shipment) => {
+  console.log(`出荷ID: ${shipment.id}`)
+  console.log(`受注番号: ${shipment.order_no}`)
+  console.log(`配送先: ${shipment.delivery_info?.name}`)
+})
+
+// クエリパラメータを指定して取得
+const filteredResponse = await listShippedShipments(client, {
+  page: 1,
+  per_page: 50,
+})
+
+console.log(`取得した出荷実績: ${filteredResponse.shipments.length}件`)
+```
+
+#### 特定日付の出荷実績を取得
+
+```typescript
+import { createClient, getShippedShipmentByDate } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// 2025年1月20日の出荷実績を取得
+const response = await getShippedShipmentByDate(client, 2025, 1, 20)
+
+console.log(`2025/1/20の出荷実績: ${response.shipments.length}件`)
+
+// 各出荷の詳細を表示
+response.shipments.forEach((shipment) => {
+  console.log(`- ${shipment.order_no}: ${shipment.delivery_info?.name}様`)
+})
+```
+
+#### 国際発送の国コード一覧を取得
+
+```typescript
+import { createClient, getInternationalRegions } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// 国際発送で指定可能な国コード一覧を取得
+const response = await getInternationalRegions(client)
+
+console.log(`対応国数: ${response.regions.length}カ国`)
+
+// 国コード一覧を表示
+response.regions.forEach((region) => {
+  console.log(`${region.code}: ${region.name}`)
+  console.log(`  最小金額: ${region.min_amount}円`)
+  console.log(`  最大金額: ${region.max_amount}円`)
+  console.log(`  最大重量: ${region.max_weight}g`)
+})
+
+// 例: アメリカ合衆国の情報を検索
+const usa = response.regions.find((r) => r.code === 'US')
+if (usa) {
+  console.log(`アメリカへの発送: 最大${usa.max_weight}gまで`)
+}
+```
+
+#### 国際発送の通貨一覧を取得
+
+```typescript
+import { createClient, getInternationalCurrencies } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// 国際発送で指定可能な通貨一覧を取得
+const response = await getInternationalCurrencies(client)
+
+console.log(`対応通貨数: ${response.currencies.length}種類`)
+
+// 通貨一覧を表示
+response.currencies.forEach((currency) => {
+  console.log(`${currency.code}: ${currency.name}`)
+})
+
+// 例: 米ドル情報の取得
+const usd = response.currencies.find((c) => c.code === 'USD')
+if (usd) {
+  console.log(`通貨: ${usd.name} (${usd.code})`)
+}
+```
+
+#### 出荷商品の引当を解除
+
+```typescript
+import { createClient, clearShipmentAllocation } from 'openlogi-api-sdk'
+
+const client = createClient({
+  apiToken: 'YOUR_API_TOKEN',
+})
+
+// 基本的な引当解除（理由なし）
+const shipment = await clearShipmentAllocation(client, '12345')
+
+console.log(`引当を解除しました: ${shipment.id}`)
+console.log(`ステータス: ${shipment.status}`)
+
+// 理由を指定して引当解除
+const shipmentWithReason = await clearShipmentAllocation(client, '67890', {
+  reason: '在庫調整のため引当を解除',
+})
+
+console.log(`引当を解除しました: ${shipmentWithReason.id}`)
+console.log(`理由: 在庫調整のため引当を解除`)
+
+/**
+ * 注意事項:
+ * - この操作により、対象出荷依頼に含まれる全ての商品から引当が解除されます
+ * - 解除された在庫は入荷待ちに変更されます
+ * - 解除実行後は引当復旧処理が行われず、再入荷待ちの出荷依頼から引当処理が行われます
+ */
 ```
 
 ## エラーハンドリング

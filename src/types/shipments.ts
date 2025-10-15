@@ -302,9 +302,7 @@ function validateShipmentAddresses(
 
   // Validate recipient based on international flag (only if provided)
   if (data.recipient !== undefined) {
-    const schema = isInternational
-      ? InternationalRecipientInfoSchema
-      : DomesticRecipientInfoSchema
+    const schema = isInternational ? InternationalRecipientInfoSchema : DomesticRecipientInfoSchema
     const result = schema.safeParse(data.recipient)
     if (!result.success) {
       result.error.issues.forEach((issue) => {
@@ -318,9 +316,7 @@ function validateShipmentAddresses(
 
   // Validate sender based on international flag (only if provided)
   if (data.sender !== undefined) {
-    const schema = isInternational
-      ? InternationalSenderInfoSchema
-      : DomesticSenderInfoSchema
+    const schema = isInternational ? InternationalSenderInfoSchema : DomesticSenderInfoSchema
     const result = schema.safeParse(data.sender)
     if (!result.success) {
       result.error.issues.forEach((issue) => {
@@ -486,7 +482,8 @@ export const UpdateShipmentRequestSchema = CreateShipmentRequestBaseSchema.parti
   .extend({
     /** 出荷商品リスト（更新時もitemsを変更する場合は全件指定） */
     items: z.array(ShipmentItemSchema).min(1).optional(),
-  }).superRefine(validateShipmentAddresses)
+  })
+  .superRefine(validateShipmentAddresses)
 
 export type UpdateShipmentRequest = z.infer<typeof UpdateShipmentRequestSchema>
 

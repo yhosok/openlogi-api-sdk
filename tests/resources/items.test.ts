@@ -22,7 +22,12 @@ import {
   updateItemByCode,
   deleteItemByCode,
 } from '../../src/resources/items'
-import { ValidationError } from '../../src/errors'
+import {
+  ValidationError,
+  RateLimitError,
+  AuthenticationError,
+  NotFoundError,
+} from '../../src/errors'
 
 const BASE_URL = 'http://localhost:8080/api'
 
@@ -399,6 +404,163 @@ describe('Items API', () => {
       )
 
       await expect(listItems(client, { id: 'item-001' })).rejects.toThrow(ValidationError)
+    })
+
+    describe('Rate Limit Errors (429)', () => {
+      it('listItems should handle rate limit errors', async () => {
+        // Create a client with no retries to avoid timeout in tests
+        const noRetryClient = createClient({
+          apiToken: 'test-token',
+          retry: 0,
+        })
+
+        server.use(
+          http.get(`${BASE_URL}/items`, () => {
+            return HttpResponse.json(
+              { error: 'Too Many Attempts.', error_description: 'Too Many Attempts.' },
+              {
+                status: 429,
+                headers: {
+                  'X-RateLimit-Limit': '60',
+                  'X-RateLimit-Remaining': '0',
+                  'Retry-After': '60',
+                },
+              },
+            )
+          }),
+        )
+
+        const error = await listItems(noRetryClient, { id: 'item-001' }).catch((e) => e)
+        expect(error).toBeInstanceOf(RateLimitError)
+        expect(error.statusCode).toBe(429)
+        expect(error.retryAfter).toBe(60)
+      })
+    })
+
+    describe('Unauthorized Errors (401)', () => {
+      it('getItem should handle authentication errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(getItem(client, 'item-001')).rejects.toThrow(AuthenticationError)
+      })
+
+      it('updateItem should handle authentication errors', async () => {
+        server.use(
+          http.put(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(updateItem(client, 'item-001', { price: 1500 })).rejects.toThrow(
+          AuthenticationError,
+        )
+      })
+
+      it('deleteItem should handle authentication errors', async () => {
+        server.use(
+          http.delete(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(deleteItem(client, 'item-001')).rejects.toThrow(AuthenticationError)
+      })
+    })
+
+    describe('Not Found Errors (404)', () => {
+      it('listItemsByAccountId should handle not found errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Not Found', error_description: 'Account not found' },
+              { status: 404 },
+            )
+          }),
+        )
+
+        await expect(
+          listItemsByAccountId(client, 'INVALID-ACCOUNT', {
+            identifier: 'ID-001',
+            code: 'CODE-001',
+          }),
+        ).rejects.toThrow(NotFoundError)
+      })
+
+      it('getItemByCode should handle not found errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items/:accountId/:code`, () => {
+            return HttpResponse.json(
+              { error: 'Not Found', error_description: 'Item not found' },
+              { status: 404 },
+            )
+          }),
+        )
+
+        await expect(getItemByCode(client, 'ACC-001', 'INVALID-CODE')).rejects.toThrow(
+          NotFoundError,
+        )
+      })
+    })
+
+    describe('Validation Errors (422)', () => {
+      it('updateItem should handle validation errors from API', async () => {
+        server.use(
+          http.put(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json(
+              {
+                error: 'validation_failed',
+                error_description: 'Invalid price value',
+                errors: {
+                  price: ['Price must be a positive integer'],
+                },
+              },
+              { status: 422 },
+            )
+          }),
+        )
+
+        await expect(updateItem(client, 'item-001', { price: -100 })).rejects.toThrow()
+      })
+
+      it('bulkCreateItems should handle validation errors for multiple items', async () => {
+        server.use(
+          http.post(`${BASE_URL}/items/bulk`, () => {
+            return HttpResponse.json(
+              {
+                error: 'validation_failed',
+                error_description: 'Validation failed for multiple items',
+                errors: {
+                  'items.0.code': ['Code is required'],
+                  'items.1.price': ['Price must be positive'],
+                },
+              },
+              { status: 422 },
+            )
+          }),
+        )
+
+        await expect(
+          bulkCreateItems(client, {
+            items: [
+              { code: '', price: 1000 },
+              { code: 'VALID-CODE', price: -100 },
+            ],
+          }),
+        ).rejects.toThrow()
+      })
     })
   })
 

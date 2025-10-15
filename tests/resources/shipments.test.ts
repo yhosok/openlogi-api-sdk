@@ -25,7 +25,12 @@ import {
   modifyTransfer,
   cancelTransfer,
 } from '../../src/resources/shipments'
-import { ValidationError } from '../../src/errors'
+import {
+  ValidationError,
+  RateLimitError,
+  AuthenticationError,
+  NotFoundError,
+} from '../../src/errors'
 
 const BASE_URL = 'http://localhost:8080/api'
 
@@ -1393,6 +1398,178 @@ describe('Shipments API', () => {
       )
 
       await expect(listShipments(client)).rejects.toThrow(ValidationError)
+    })
+
+    describe('Rate Limit Errors (429)', () => {
+      it('listShipments should handle rate limit errors', async () => {
+        // Create a client with no retries to avoid timeout in tests
+        const noRetryClient = createClient({
+          apiToken: 'test-token',
+          retry: 0,
+        })
+
+        server.use(
+          http.get(`${BASE_URL}/shipments`, () => {
+            return HttpResponse.json(
+              { error: 'Too Many Attempts.', error_description: 'Too Many Attempts.' },
+              {
+                status: 429,
+                headers: {
+                  'X-RateLimit-Limit': '60',
+                  'X-RateLimit-Remaining': '0',
+                  'Retry-After': '60',
+                },
+              },
+            )
+          }),
+        )
+
+        const error = await listShipments(noRetryClient).catch((e) => e)
+        expect(error).toBeInstanceOf(RateLimitError)
+        expect(error.statusCode).toBe(429)
+        expect(error.retryAfter).toBe(60)
+      })
+    })
+
+    describe('Unauthorized Errors (401)', () => {
+      it('getShipment should handle authentication errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/shipments/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(getShipment(client, 'ship-001')).rejects.toThrow(AuthenticationError)
+      })
+
+      it('updateShipment should handle authentication errors', async () => {
+        server.use(
+          http.put(`${BASE_URL}/shipments/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(
+          updateShipment(client, 'ship-001', { shipping_date: '2025-01-25' }),
+        ).rejects.toThrow(AuthenticationError)
+      })
+
+      it('deleteShipment should handle authentication errors', async () => {
+        server.use(
+          http.delete(`${BASE_URL}/shipments/:id`, () => {
+            return HttpResponse.json(
+              { error: 'Unauthorized', error_description: 'Invalid API token' },
+              { status: 401 },
+            )
+          }),
+        )
+
+        await expect(deleteShipment(client, 'ship-001')).rejects.toThrow(AuthenticationError)
+      })
+    })
+
+    describe('Not Found Errors (404)', () => {
+      it('listShipmentsByAccountId should handle not found errors', async () => {
+        const { listShipmentsByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.get(`${BASE_URL}/shipments/:accountId`, () => {
+            return HttpResponse.json(
+              { error: 'Not Found', error_description: 'Account not found' },
+              { status: 404 },
+            )
+          }),
+        )
+
+        await expect(
+          listShipmentsByAccountId(client, 'INVALID-ACCOUNT', {
+            identifier: '2015-00001',
+          }),
+        ).rejects.toThrow(NotFoundError)
+      })
+
+      it('getShipmentByAccountId should handle not found errors', async () => {
+        const { getShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.get(`${BASE_URL}/shipments/:accountId/:identifier`, () => {
+            return HttpResponse.json(
+              { error: 'Not Found', error_description: 'Shipment not found' },
+              { status: 404 },
+            )
+          }),
+        )
+
+        await expect(getShipmentByAccountId(client, 'ACC-001', 'INVALID-ID')).rejects.toThrow(
+          NotFoundError,
+        )
+      })
+    })
+
+    describe('Validation Errors (422)', () => {
+      it('createShipment should handle validation errors from API', async () => {
+        server.use(
+          http.post(`${BASE_URL}/shipments`, () => {
+            return HttpResponse.json(
+              {
+                error: 'validation_failed',
+                error_description: 'Invalid postcode format',
+                errors: {
+                  'recipient.postcode': ['Postcode must be 7-8 digits'],
+                },
+              },
+              { status: 422 },
+            )
+          }),
+        )
+
+        await expect(
+          createShipment(client, {
+            order_no: 'ORDER-001',
+            items: [{ code: 'TEST-001', quantity: 1 }],
+            recipient: {
+              name: '山田太郎',
+              postcode: '123', // Invalid
+              prefecture: '東京都',
+              address1: '千代田1-1-1',
+            },
+          }),
+        ).rejects.toThrow()
+      })
+
+      it('updateShipment should handle validation errors for international shipments', async () => {
+        server.use(
+          http.put(`${BASE_URL}/shipments/:id`, () => {
+            return HttpResponse.json(
+              {
+                error: 'validation_failed',
+                error_description: 'Missing required fields for international shipment',
+                errors: {
+                  'recipient.region_code': ['Region code is required for international shipments'],
+                },
+              },
+              { status: 422 },
+            )
+          }),
+        )
+
+        await expect(
+          updateShipment(client, 'ship-001', {
+            international: true,
+            recipient: {
+              // Missing region_code
+              postcode: '10001',
+              city: 'New York',
+              address: '123 Main St',
+              name: 'John Doe',
+            },
+          }),
+        ).rejects.toThrow()
+      })
     })
   })
 
