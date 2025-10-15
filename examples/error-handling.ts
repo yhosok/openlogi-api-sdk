@@ -53,8 +53,15 @@ async function demonstrateErrorHandling(): Promise<void> {
       console.log('✅ NotFoundErrorを正しくキャッチしました')
       console.log(`   メッセージ: ${error.message}`)
       console.log(`   ステータスコード: ${error.statusCode}`)
+    } else if (error instanceof ApiError) {
+      // APIによっては403 Forbiddenを返す場合がある
+      console.log('✅ ApiErrorを正しくキャッチしました')
+      console.log(`   メッセージ: ${error.message}`)
+      console.log(`   ステータスコード: ${error.statusCode}`)
+      console.log('   💡 注意: APIによっては存在しないリソースに対して403を返す場合があります')
     } else {
       console.log('❌ 予期しないエラータイプです')
+      console.log(`   エラー: ${error}`)
     }
   }
 
@@ -90,7 +97,7 @@ async function demonstrateErrorHandling(): Promise<void> {
   try {
     const invalidClient = createClient({
       apiToken: 'invalid-token-12345',
-      baseUrl: 'https://api.openlogi.com',
+      baseUrl: 'http://localhost:8080',
     })
     await getItem(invalidClient, 'some-id')
   } catch (error) {

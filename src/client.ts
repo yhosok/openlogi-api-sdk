@@ -250,22 +250,6 @@ export function createClient(config: ClientConfig): OpenLogiClient {
       'X-Api-Version': mergedConfig.apiVersion,
       'Content-Type': 'application/json',
     },
-    hooks: {
-      beforeError: [
-        async (error) => {
-          // HTTPErrorの場合はカスタムエラーに変換
-          if (error.name === 'HTTPError') {
-            const customError = await createErrorFromResponse(error as KyHTTPError)
-            // kyのエラーオブジェクトにカスタムエラーの情報を注入
-            error.name = customError.name
-            error.message = customError.message
-            // カスタムエラーの追加プロパティをerrorオブジェクトに追加
-            Object.assign(error, customError)
-          }
-          return error
-        },
-      ],
-    },
   })
 
   return {
@@ -348,10 +332,10 @@ export async function request<T>(
       throw error
     }
 
-    // kyのHTTPErrorの場合（beforeErrorで変換されているはず）
-    if (error instanceof Error && 'response' in error) {
-      // beforeErrorで変換されたエラーをそのままスロー
-      throw error
+    // kyのHTTPErrorの場合は、実際のカスタムエラーインスタンスを作成してスロー
+    if (error instanceof Error && 'response' in error && error.name === 'HTTPError') {
+      const customError = await createErrorFromResponse(error as KyHTTPError)
+      throw customError
     }
 
     // その他のエラーは汎用的なOpenLogiErrorとしてスロー
