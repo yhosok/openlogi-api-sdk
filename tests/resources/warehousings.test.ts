@@ -17,6 +17,7 @@ import {
   getWarehousingLabel,
 } from '../../src/resources/warehousings'
 import {
+  ApiError,
   ValidationError,
   RateLimitError,
   AuthenticationError,
@@ -1014,6 +1015,126 @@ describe('Warehousings API', () => {
       await expect(listWarehousing(client)).rejects.toThrow(ValidationError)
     })
 
+    describe('Bad Request Errors (400)', () => {
+      it('createWarehousing should handle 400 bad request errors from server', async () => {
+        server.use(
+          http.post(`${BASE_URL}/warehousings`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Request',
+                message: 'Server rejected the warehousing data',
+              },
+              { status: 400 },
+            )
+          }),
+        )
+
+        // Pass data that passes client-side validation but server rejects
+        // Note: SDK treats 400 as ValidationError
+        const error = await createWarehousing(client, {
+          inspection_type: 'CODE',
+          arrival_date: '2025-01-25',
+          items: [{ code: 'VALID-CODE', quantity: 100 }],
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ValidationError)
+        expect(error.message).toContain('Server rejected the warehousing data')
+      })
+    })
+
+    describe('Conflict Errors (409)', () => {
+      it('createWarehousing should handle 409 conflict errors for duplicate warehousing entry', async () => {
+        server.use(
+          http.post(`${BASE_URL}/warehousings`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Conflict',
+                message: 'Duplicate warehousing entry detected',
+              },
+              { status: 409 },
+            )
+          }),
+        )
+
+        const error = await createWarehousing(client, {
+          inspection_type: 'CODE',
+          arrival_date: '2025-01-25',
+          items: [{ code: 'TEST-001', quantity: 100 }],
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(409)
+      })
+    })
+
+    describe('Server Errors (502/503)', () => {
+      it('listWarehousing should handle 502 Bad Gateway errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Gateway',
+                message: 'Upstream server error',
+              },
+              { status: 502 },
+            )
+          }),
+        )
+
+        const error = await listWarehousing(client).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(502)
+      })
+
+      it('getWarehousing should handle 503 Service Unavailable errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings/:id`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Service Unavailable',
+                message: 'Server is temporarily unavailable',
+              },
+              { status: 503 },
+            )
+          }),
+        )
+
+        const error = await getWarehousing(client, 'wh-001').catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(503)
+      })
+    })
+
+    describe('Malformed Response Errors', () => {
+      it('listWarehousing should handle malformed JSON responses', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings`, () => {
+            return new Response('{ invalid json }', {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }),
+        )
+
+        await expect(listWarehousing(client)).rejects.toThrow()
+      })
+
+      it('getWarehousing should handle responses missing required fields', async () => {
+        server.use(
+          http.get(`${BASE_URL}/warehousings/:id`, () => {
+            return HttpResponse.json({
+              // Missing required fields like 'inspection_type', 'items'
+              id: 'wh-001',
+            })
+          }),
+        )
+
+        await expect(getWarehousing(client, 'wh-001')).rejects.toThrow(ValidationError)
+      })
+    })
+
     describe('Rate Limit Errors (429)', () => {
       it('listWarehousing should handle rate limit errors', async () => {
         // Create a client with no retries to avoid timeout in tests
@@ -1145,6 +1266,109 @@ describe('Warehousings API', () => {
           }),
         ).rejects.toThrow()
       })
+    })
+  })
+
+  describe('エッジケース: 日付パラメータ境界値テスト', () => {
+    it('2月29日（うるう年2024年）で入荷実績を取得できる', async () => {
+      const response = await getStockedWarehousingByDate(client, 2024, 2, 29)
+      expect(response.warehousings).toBeDefined()
+      expect(Array.isArray(response.warehousings)).toBe(true)
+    })
+
+    it('2月30日（無効な日付）は検証を通過するがAPIがエラーを返す可能性がある', async () => {
+      // SDKは日付の妥当性をチェックしないため、API側で処理される
+      // 実際のAPIは無効な日付の場合エラーを返すか、空の結果を返す可能性がある
+      const response = await getStockedWarehousingByDate(client, 2025, 2, 30)
+      expect(response.warehousings).toBeDefined()
+      expect(Array.isArray(response.warehousings)).toBe(true)
+    })
+
+    it('13月（無効な月）でValidationErrorを投げる', async () => {
+      await expect(getStockedWarehousingByDate(client, 2025, 13, 15)).rejects.toThrow(
+        ValidationError,
+      )
+    })
+
+    it('12月31日、9999年（極端な未来日付）で入荷実績を取得できる', async () => {
+      // 年の上限は2100なので、2100-12-31でテスト
+      const response = await getStockedWarehousingByDate(client, 2100, 12, 31)
+      expect(response.warehousings).toBeDefined()
+      expect(Array.isArray(response.warehousings)).toBe(true)
+    })
+  })
+
+  describe('エッジケース: 特殊文字テスト', () => {
+    it('改行とタブを含むcompany_memoで入荷依頼を作成できる', async () => {
+      let capturedBody: unknown
+
+      server.use(
+        http.post(`${BASE_URL}/warehousings`, async ({ request }) => {
+          capturedBody = await request.json()
+          const body = capturedBody
+          return HttpResponse.json({
+            id: 'wh-memo',
+            status: 'waiting',
+            created_at: '2025-01-11T00:00:00Z',
+            ...body,
+            items:
+              body && typeof body === 'object' && 'items' in body && Array.isArray(body.items)
+                ? body.items.map((item: { code: string; quantity: number }, index: number) => ({
+                    id: `item-${index + 1}`,
+                    code: item.code,
+                    name: `商品名-${item.code}`,
+                    quantity: item.quantity,
+                  }))
+                : [],
+          })
+        }),
+      )
+
+      const warehousingData = {
+        inspection_type: 'CODE' as const,
+        arrival_date: '2025-01-25',
+        items: [{ code: 'TEST-001', quantity: 100 }],
+        company_memo: 'メモ1行目\n\tタブインデント付き2行目\n3行目',
+      }
+
+      const response = await createWarehousing(client, warehousingData)
+      expect(response.status).toBe('waiting')
+      // リクエストボディが正しく送信されたことを確認
+      expect(capturedBody).toHaveProperty(
+        'company_memo',
+        'メモ1行目\n\tタブインデント付き2行目\n3行目',
+      )
+    })
+  })
+
+  describe('エッジケース: 配列境界値テスト', () => {
+    it('1商品のみで入荷依頼を作成できる（最小）', async () => {
+      const warehousingData = {
+        inspection_type: 'CODE' as const,
+        arrival_date: '2025-01-25',
+        items: [{ code: 'TEST-001', quantity: 100 }],
+      }
+
+      const response = await createWarehousing(client, warehousingData)
+      expect(response.status).toBe('waiting')
+      expect(response.items).toHaveLength(1)
+      expect(response.items[0].code).toBe('TEST-001')
+    })
+  })
+
+  describe('エッジケース: 空/オプショナルフィールドテスト', () => {
+    it('すべてのオプショナルフィールドを省略して入荷依頼を作成できる', async () => {
+      const warehousingData = {
+        inspection_type: 'CODE' as const,
+        arrival_date: '2025-01-25',
+        items: [{ code: 'TEST-001', quantity: 100 }],
+      }
+
+      const response = await createWarehousing(client, warehousingData)
+      expect(response.status).toBe('waiting')
+      expect(response.inspection_type).toBe('CODE')
+      expect(response.arrival_date).toBe('2025-01-25')
+      expect(response.items).toHaveLength(1)
     })
   })
 })

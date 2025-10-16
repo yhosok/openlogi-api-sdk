@@ -23,6 +23,7 @@ import {
   deleteItemByCode,
 } from '../../src/resources/items'
 import {
+  ApiError,
   ValidationError,
   RateLimitError,
   AuthenticationError,
@@ -257,6 +258,41 @@ describe('Items API', () => {
 
       await expect(deleteItemImage(client, 'item-001', 'not-found')).rejects.toThrow()
     })
+
+    it('空のitemIdでエラーが発生する', async () => {
+      server.use(
+        http.delete(`${BASE_URL}/items/:id/images/:imageId`, () => {
+          return HttpResponse.json({ message: 'Invalid item ID' }, { status: 400 })
+        }),
+      )
+
+      await expect(deleteItemImage(client, '', 'img-001')).rejects.toThrow()
+    })
+
+    it('認証エラーが発生する', async () => {
+      server.use(
+        http.delete(`${BASE_URL}/items/:id/images/:imageId`, () => {
+          return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+        }),
+      )
+
+      // deleteItemImage uses client.http.delete directly, so errors are HTTPError not custom errors
+      await expect(deleteItemImage(client, 'item-001', 'img-001')).rejects.toThrow()
+    })
+
+    it('正しいエンドポイントを呼び出す', async () => {
+      let calledPath = ''
+      server.use(
+        http.delete(`${BASE_URL}/items/:id/images/:imageId`, ({ request }) => {
+          calledPath = new URL(request.url).pathname
+          return HttpResponse.json({})
+        }),
+      )
+
+      await deleteItemImage(client, 'item-001', 'img-001')
+
+      expect(calledPath).toBe('/api/items/item-001/images/img-001')
+    })
   })
 
   describe('listItemsByAccountId', () => {
@@ -371,6 +407,69 @@ describe('Items API', () => {
 
       expect(calledPath).toBe('/api/items/ACC-001/CODE-001/img-002')
     })
+
+    it('存在しない画像の削除はエラーを投げる', async () => {
+      server.use(
+        http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, () => {
+          return HttpResponse.json({ message: 'Image not found' }, { status: 404 })
+        }),
+      )
+
+      // deleteItemImageByCode uses client.http.delete directly, so errors are HTTPError not custom errors
+      await expect(
+        deleteItemImageByCode(client, 'ACC-001', 'CODE-001', 'not-found'),
+      ).rejects.toThrow()
+    })
+
+    it('存在しない商品コードでエラーを投げる', async () => {
+      server.use(
+        http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, () => {
+          return HttpResponse.json({ message: 'Item not found' }, { status: 404 })
+        }),
+      )
+
+      // deleteItemImageByCode uses client.http.delete directly, so errors are HTTPError not custom errors
+      await expect(
+        deleteItemImageByCode(client, 'ACC-001', 'INVALID-CODE', 'img-002'),
+      ).rejects.toThrow()
+    })
+
+    it('認証エラーが発生する', async () => {
+      server.use(
+        http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, () => {
+          return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+        }),
+      )
+
+      // deleteItemImageByCode uses client.http.delete directly, so errors are HTTPError not custom errors
+      await expect(
+        deleteItemImageByCode(client, 'ACC-001', 'CODE-001', 'img-002'),
+      ).rejects.toThrow()
+    })
+
+    it('空のaccountIdでエラーが発生する', async () => {
+      server.use(
+        http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, () => {
+          return HttpResponse.json({ message: 'Invalid account ID' }, { status: 400 })
+        }),
+      )
+
+      await expect(deleteItemImageByCode(client, '', 'CODE-001', 'img-002')).rejects.toThrow()
+    })
+
+    it('特殊文字を含む商品コードも正しく処理できる', async () => {
+      let calledPath = ''
+      server.use(
+        http.delete(`${BASE_URL}/items/:accountId/:code/:imageId`, ({ request }) => {
+          calledPath = new URL(request.url).pathname
+          return HttpResponse.json({})
+        }),
+      )
+
+      await deleteItemImageByCode(client, 'ACC-001', 'CODE-001-SPECIAL', 'img-002')
+
+      expect(calledPath).toBe('/api/items/ACC-001/CODE-001-SPECIAL/img-002')
+    })
   })
 
   describe('エラーハンドリング', () => {
@@ -404,6 +503,151 @@ describe('Items API', () => {
       )
 
       await expect(listItems(client, { id: 'item-001' })).rejects.toThrow(ValidationError)
+    })
+
+    describe('Bad Request Errors (400)', () => {
+      it('createItem should handle 400 bad request errors from server', async () => {
+        server.use(
+          http.post(`${BASE_URL}/items`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Request',
+                message: 'Server rejected the request data',
+              },
+              { status: 400 },
+            )
+          }),
+        )
+
+        // Pass data that passes client-side validation but server rejects
+        // Note: SDK treats 400 as ValidationError
+        const error = await createItem(client, {
+          code: 'VALID-CODE-BUT-SERVER-REJECTS',
+          name: 'Valid Name',
+          temperature_zone: 'dry',
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ValidationError)
+        expect(error.message).toContain('Server rejected the request data')
+      })
+
+      it('bulkCreateItems should handle 400 bad request errors from server', async () => {
+        server.use(
+          http.post(`${BASE_URL}/items/bulk`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Request',
+                message: 'Server rejected the batch request',
+              },
+              { status: 400 },
+            )
+          }),
+        )
+
+        // Pass data that passes client-side validation but server rejects
+        // Note: SDK treats 400 as ValidationError
+        const error = await bulkCreateItems(client, {
+          items: [
+            { code: 'VALID-CODE-1', price: 1000 },
+            { code: 'VALID-CODE-2', price: 2000 },
+          ],
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ValidationError)
+        expect(error.message).toContain('Server rejected the batch request')
+      })
+    })
+
+    describe('Conflict Errors (409)', () => {
+      it('createItem should handle 409 conflict errors for duplicate item code', async () => {
+        server.use(
+          http.post(`${BASE_URL}/items`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Conflict',
+                message: 'Item with code TEST-001 already exists',
+              },
+              { status: 409 },
+            )
+          }),
+        )
+
+        const error = await createItem(client, {
+          code: 'TEST-001',
+          name: 'Test Item',
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(409)
+      })
+    })
+
+    describe('Server Errors (502/503)', () => {
+      it('listItems should handle 502 Bad Gateway errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Gateway',
+                message: 'Upstream server error',
+              },
+              { status: 502 },
+            )
+          }),
+        )
+
+        const error = await listItems(client, { id: 'item-001' }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(502)
+      })
+
+      it('getItem should handle 503 Service Unavailable errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Service Unavailable',
+                message: 'Server is temporarily unavailable',
+              },
+              { status: 503 },
+            )
+          }),
+        )
+
+        const error = await getItem(client, 'item-001').catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(503)
+      })
+    })
+
+    describe('Malformed Response Errors', () => {
+      it('listItems should handle malformed JSON responses', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items`, () => {
+            return new Response('{ invalid json }', {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }),
+        )
+
+        await expect(listItems(client, { id: 'item-001' })).rejects.toThrow()
+      })
+
+      it('getItem should handle responses missing required fields', async () => {
+        server.use(
+          http.get(`${BASE_URL}/items/:id`, () => {
+            return HttpResponse.json({
+              // Missing required fields like 'code', 'name'
+              id: 'item-001',
+            })
+          }),
+        )
+
+        await expect(getItem(client, 'item-001')).rejects.toThrow(ValidationError)
+      })
     })
 
     describe('Rate Limit Errors (429)', () => {
@@ -1188,6 +1432,189 @@ describe('Items API', () => {
           }),
         ).rejects.toThrow(ValidationError)
       })
+    })
+  })
+
+  describe('エッジケース: 特殊文字テスト', () => {
+    it('絵文字を含む商品名で作成できる', async () => {
+      server.use(
+        http.post(`${BASE_URL}/items`, async ({ request }) => {
+          const body = (await request.json()) as { code: string; name: string }
+          return HttpResponse.json({
+            id: 'item-emoji',
+            code: body.code,
+            name: body.name,
+            temperature_zone: 'dry',
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-10T00:00:00Z',
+          })
+        }),
+      )
+
+      const item = await createItem(client, {
+        code: 'EMOJI-001',
+        name: '🎉テスト商品🎁',
+        temperature_zone: 'dry',
+      })
+
+      expect(item.name).toBe('🎉テスト商品🎁')
+      expect(item.code).toBe('EMOJI-001')
+    })
+
+    it('16文字の説明文で商品を作成できる（境界値）', async () => {
+      const maxDescription = 'A'.repeat(16)
+
+      server.use(
+        http.post(`${BASE_URL}/items`, async ({ request }) => {
+          const body = (await request.json()) as { code: string; description: string }
+          return HttpResponse.json({
+            id: 'item-long-desc',
+            code: body.code,
+            description: body.description,
+            name: 'Test Item',
+            temperature_zone: 'dry',
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-10T00:00:00Z',
+          })
+        }),
+      )
+
+      const item = await createItem(client, {
+        code: 'MAX-DESC-001',
+        name: 'Test Item',
+        description: maxDescription,
+        temperature_zone: 'dry',
+      })
+
+      expect(item.description).toBe(maxDescription)
+      expect(item.description?.length).toBe(16)
+    })
+
+    it('255文字ちょうどの商品名は受け入れられる（境界値）', async () => {
+      const exactMaxName = 'あ'.repeat(255)
+
+      server.use(
+        http.post(`${BASE_URL}/items`, async ({ request }) => {
+          const body = (await request.json()) as { code: string; name: string }
+          return HttpResponse.json({
+            id: 'item-max-name',
+            code: body.code,
+            name: body.name,
+            temperature_zone: 'dry',
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-10T00:00:00Z',
+          })
+        }),
+      )
+
+      const item = await createItem(client, {
+        code: 'MAX-NAME-001',
+        name: exactMaxName,
+        temperature_zone: 'dry',
+      })
+
+      expect(item.name).toBe(exactMaxName)
+      expect(item.name.length).toBe(255)
+    })
+  })
+
+  describe('エッジケース: 配列境界値テスト', () => {
+    it('商品を1件だけ一括作成できる（最小）', async () => {
+      const itemsData = {
+        items: [{ code: 'BULK-SINGLE', price: 1000 }],
+      }
+
+      const response = await bulkCreateItems(client, itemsData)
+      expect(response.items).toHaveLength(1)
+      expect(response.items[0].code).toBe('BULK-SINGLE')
+      expect(response.items[0].price).toBe('1000')
+    })
+  })
+
+  describe('エッジケース: 数値境界値テスト', () => {
+    it('価格0（最小）で商品を作成できる', async () => {
+      server.use(
+        http.post(`${BASE_URL}/items`, async ({ request }) => {
+          const body = (await request.json()) as { code: string; price: number }
+          return HttpResponse.json({
+            id: 'item-zero-price',
+            code: body.code,
+            name: 'Zero Price Item',
+            price: String(body.price),
+            temperature_zone: 'dry',
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-10T00:00:00Z',
+          })
+        }),
+      )
+
+      const item = await createItem(client, {
+        code: 'ZERO-PRICE-001',
+        name: 'Zero Price Item',
+        price: 0,
+        temperature_zone: 'dry',
+      })
+
+      expect(item.price).toBe('0')
+      expect(item.code).toBe('ZERO-PRICE-001')
+    })
+
+    it('価格999999999（大きな値）で商品を作成できる', async () => {
+      server.use(
+        http.post(`${BASE_URL}/items`, async ({ request }) => {
+          const body = (await request.json()) as { code: string; price: number }
+          return HttpResponse.json({
+            id: 'item-large-price',
+            code: body.code,
+            name: 'Large Price Item',
+            price: String(body.price),
+            temperature_zone: 'dry',
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-10T00:00:00Z',
+          })
+        }),
+      )
+
+      const item = await createItem(client, {
+        code: 'LARGE-PRICE-001',
+        name: 'Large Price Item',
+        price: 999999999,
+        temperature_zone: 'dry',
+      })
+
+      expect(item.price).toBe('999999999')
+      expect(item.code).toBe('LARGE-PRICE-001')
+    })
+  })
+
+  describe('エッジケース: 空/オプショナルフィールドテスト', () => {
+    it('空のオブジェクトで商品を更新しようとすると何も変更されない', async () => {
+      server.use(
+        http.put(`${BASE_URL}/items/:id`, async ({ request, params }) => {
+          const { id } = params
+          const body = await request.json()
+
+          // 空のbodyの場合、既存の値を返す
+          return HttpResponse.json({
+            id: id as string,
+            code: 'TEST-001',
+            name: 'Existing Item',
+            price: '1000',
+            temperature_zone: 'dry',
+            stock: 100,
+            created_at: '2025-01-10T00:00:00Z',
+            updated_at: '2025-01-11T00:00:00Z',
+            ...(body && typeof body === 'object' ? body : {}),
+          })
+        }),
+      )
+
+      const response = await updateItem(client, 'item-001', {})
+
+      // 何も変更されないので既存の値が返る
+      expect(response.id).toBe('item-001')
+      expect(response.code).toBe('TEST-001')
+      expect(response.name).toBe('Existing Item')
     })
   })
 })

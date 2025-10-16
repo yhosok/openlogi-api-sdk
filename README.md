@@ -69,11 +69,7 @@ const client = createClient({
   baseUrl: 'http://localhost:8080', // 本番環境では適切なURLに変更
 })
 
-// パターン1: パラメータなしで呼び出し（全商品を取得）
-const allItems = await listItems(client)
-console.log(`取得した商品数: ${allItems.items.length}`)
-
-// パターン2: 特定のIDでフィルタリング（パラメータを指定する場合、idは必須）
+// 特定のIDでフィルタリング
 const response = await listItems(client, {
   id: 'item-001,item-002',  // 商品ID（必須、カンマ区切りで最大100件）
 })
@@ -94,11 +90,7 @@ const client = createClient({
   baseUrl: 'http://localhost:8080',
 })
 
-// パターン1: パラメータなしで呼び出し（全商品を取得）
-const allItems = await listItems(client)
-console.log(`取得した商品数: ${allItems.items.length}`)
-
-// パターン2: 特定のIDでフィルタリング（パラメータを指定する場合、idは必須）
+// 特定のIDでフィルタリング
 const response = await listItems(client, {
   id: 'item-001,item-002',  // 商品ID（必須、カンマ区切りで最大100件）
 })
@@ -119,18 +111,14 @@ const client = createClient({
   apiToken: 'YOUR_API_TOKEN',
 })
 
-// パターン1: パラメータなしで呼び出し（全商品を取得）
-const allItems = await listItems(client)
-
-// パターン2: 特定のIDでフィルタリング（パラメータを指定する場合、idは必須）
+// 特定のIDでフィルタリング
 const response = await listItems(client, {
   id: 'item-001,item-002,item-003',  // 商品ID（必須、カンマ区切りで最大100件）
 })
 
 console.log(`取得した商品数: ${response.items.length}`)
-response.pagination // ページネーション情報
 
-// パターン3: 在庫情報も含める
+// 在庫情報も含める
 const responseWithStock = await listItems(client, {
   id: 'item-001',
   stock: 1,  // 在庫情報を含める（任意）
@@ -400,11 +388,11 @@ const client = createClient({
 
 // 直近の入荷実績を取得
 const recent = await getStockedWarehousing(client)
-console.log(`直近の入荷実績: ${recent.stocked_warehousings.length}件`)
+console.log(`直近の入荷実績: ${recent.warehousings.length}件`)
 
 // 特定日付の入荷実績を取得
 const specific = await getStockedWarehousingByDate(client, 2025, 1, 20)
-console.log(`2025/1/20の入荷実績: ${specific.stocked_warehousings.length}件`)
+console.log(`2025/1/20の入荷実績: ${specific.warehousings.length}件`)
 ```
 
 #### 入荷ラベルをPDF形式で取得
@@ -456,7 +444,7 @@ const shipment = await createShipment(client, {
       quantity: 1,
     },
   ],
-  delivery_info: {
+  recipient: {
     name: '山田太郎',
     postcode: '1000001',
     prefecture: '東京都',
@@ -489,7 +477,7 @@ const result = await bulkCreateShipments(client, {
     {
       order_no: 'ORDER-001',
       items: [{ code: 'ITEM-001', quantity: 1 }],
-      delivery_info: {
+      recipient: {
         name: '山田太郎',
         postcode: '1000001',
         prefecture: '東京都',
@@ -501,7 +489,7 @@ const result = await bulkCreateShipments(client, {
     {
       order_no: 'ORDER-002',
       items: [{ code: 'ITEM-002', quantity: 2 }],
-      delivery_info: {
+      recipient: {
         name: '佐藤花子',
         postcode: '1500001',
         prefecture: '東京都',
@@ -527,7 +515,7 @@ const client = createClient({
 
 const updated = await updateShipment(client, '12345', {
   shipping_date: '2025-01-26',
-  delivery_info: {
+  recipient: {
     name: '山田太郎',
     postcode: '1000002',
     prefecture: '東京都',
@@ -768,7 +756,7 @@ console.log(`出荷実績数: ${response.shipments.length}件`)
 response.shipments.forEach((shipment) => {
   console.log(`出荷ID: ${shipment.id}`)
   console.log(`受注番号: ${shipment.order_no}`)
-  console.log(`配送先: ${shipment.delivery_info?.name}`)
+  console.log(`配送先: ${shipment.recipient?.name}`)
 })
 
 // クエリパラメータを指定して取得
@@ -796,7 +784,7 @@ console.log(`2025/1/20の出荷実績: ${response.shipments.length}件`)
 
 // 各出荷の詳細を表示
 response.shipments.forEach((shipment) => {
-  console.log(`- ${shipment.order_no}: ${shipment.delivery_info?.name}様`)
+  console.log(`- ${shipment.order_no}: ${shipment.recipient?.name}様`)
 })
 ```
 

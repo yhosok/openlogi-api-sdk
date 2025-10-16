@@ -26,6 +26,7 @@ import {
   cancelTransfer,
 } from '../../src/resources/shipments'
 import {
+  ApiError,
   ValidationError,
   RateLimitError,
   AuthenticationError,
@@ -1392,6 +1393,186 @@ describe('Shipments API', () => {
       await expect(listShipments(client)).rejects.toThrow(ValidationError)
     })
 
+    describe('Bad Request Errors (400)', () => {
+      it('createShipment should handle 400 bad request errors from server', async () => {
+        server.use(
+          http.post(`${BASE_URL}/shipments`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Request',
+                message: 'Server rejected the shipment data',
+              },
+              { status: 400 },
+            )
+          }),
+        )
+
+        // Pass data that passes client-side validation but server rejects
+        // Note: SDK treats 400 as ValidationError
+        const error = await createShipment(client, {
+          order_no: 'VALID-ORDER-001',
+          items: [{ code: 'VALID-CODE', quantity: 1 }],
+          recipient: {
+            name: '山田太郎',
+            postcode: '1000001',
+            prefecture: '東京都',
+            address1: '千代田1-1-1',
+            phone: '09012345678',
+          },
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ValidationError)
+        expect(error.message).toContain('Server rejected the shipment data')
+      })
+
+      it('bulkCreateShipments should handle 400 bad request errors from server', async () => {
+        server.use(
+          http.post(`${BASE_URL}/shipments/bulk`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Request',
+                message: 'Server rejected the batch shipment data',
+              },
+              { status: 400 },
+            )
+          }),
+        )
+
+        // Pass data that passes client-side validation but server rejects
+        // Note: SDK treats 400 as ValidationError
+        const error = await bulkCreateShipments(client, {
+          shipments: [
+            {
+              order_no: 'VALID-ORDER-001',
+              items: [{ code: 'VALID-CODE-1', quantity: 1 }],
+              recipient: {
+                name: '山田太郎',
+                postcode: '1000001',
+                prefecture: '東京都',
+                address1: '千代田1-1-1',
+                phone: '09012345678',
+              },
+            },
+            {
+              order_no: 'VALID-ORDER-002',
+              items: [{ code: 'VALID-CODE-2', quantity: 2 }],
+              recipient: {
+                name: '田中花子',
+                postcode: '1000002',
+                prefecture: '東京都',
+                address1: '千代田2-2-2',
+                phone: '09087654321',
+              },
+            },
+          ],
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ValidationError)
+        expect(error.message).toContain('Server rejected the batch shipment data')
+      })
+    })
+
+    describe('Conflict Errors (409)', () => {
+      it('updateShipment should handle 409 conflict errors for already-shipped shipment', async () => {
+        server.use(
+          http.put(`${BASE_URL}/shipments/:id`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Conflict',
+                message: 'Cannot update shipment that has already been shipped',
+              },
+              { status: 409 },
+            )
+          }),
+        )
+
+        const error = await updateShipment(client, 'ship-001', {
+          shipping_date: '2025-01-25',
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(409)
+      })
+    })
+
+    describe('Server Errors (502/503)', () => {
+      it('createShipment should handle 503 Service Unavailable errors', async () => {
+        server.use(
+          http.post(`${BASE_URL}/shipments`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Service Unavailable',
+                message: 'Server is temporarily unavailable',
+              },
+              { status: 503 },
+            )
+          }),
+        )
+
+        const error = await createShipment(client, {
+          order_no: 'ORDER-001',
+          items: [{ code: 'TEST-001', quantity: 1 }],
+          recipient: {
+            name: '山田太郎',
+            postcode: '1000001',
+            prefecture: '東京都',
+            address1: '千代田1-1-1',
+            phone: '09012345678',
+          },
+        }).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(503)
+      })
+
+      it('listShipments should handle 502 Bad Gateway errors', async () => {
+        server.use(
+          http.get(`${BASE_URL}/shipments`, () => {
+            return HttpResponse.json(
+              {
+                error: 'Bad Gateway',
+                message: 'Upstream server error',
+              },
+              { status: 502 },
+            )
+          }),
+        )
+
+        const error = await listShipments(client).catch((e) => e)
+
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error.statusCode).toBe(502)
+      })
+    })
+
+    describe('Malformed Response Errors', () => {
+      it('listShipments should handle malformed JSON responses', async () => {
+        server.use(
+          http.get(`${BASE_URL}/shipments`, () => {
+            return new Response('{ invalid json }', {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          }),
+        )
+
+        await expect(listShipments(client)).rejects.toThrow()
+      })
+
+      it('getShipment should handle responses missing required fields', async () => {
+        server.use(
+          http.get(`${BASE_URL}/shipments/:id`, () => {
+            return HttpResponse.json({
+              // Missing required fields like 'order_no', 'items'
+              id: 'ship-001',
+            })
+          }),
+        )
+
+        await expect(getShipment(client, 'ship-001')).rejects.toThrow(ValidationError)
+      })
+    })
+
     describe('Rate Limit Errors (429)', () => {
       it('listShipments should handle rate limit errors', async () => {
         // Create a client with no retries to avoid timeout in tests
@@ -2127,6 +2308,96 @@ describe('Shipments API', () => {
         expect(response.identifier).toBe('2015-00001')
         expect(response.shipping_date).toBe('2025-01-25')
       })
+
+      it('受取人情報を更新できる', async () => {
+        const { updateShipmentByAccountId } = await import('../../src/resources/shipments')
+        const updateData = {
+          recipient: {
+            name: '更新太郎',
+            postcode: '1000002',
+            prefecture: '東京都',
+            address1: '千代田2-2-2',
+            phone: '09087654321',
+          },
+        }
+
+        const response = await updateShipmentByAccountId(client, 'TS001', '2015-00001', updateData)
+
+        expect(response.identifier).toBe('2015-00001')
+        expect(response.recipient).toBeDefined()
+      })
+
+      it('存在しない出荷依頼はNotFoundErrorを投げる', async () => {
+        const { updateShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.put(`${BASE_URL}/shipments/:accountId/:identifier`, () => {
+            return HttpResponse.json({ message: 'Shipment not found' }, { status: 404 })
+          }),
+        )
+
+        await expect(
+          updateShipmentByAccountId(client, 'TS001', 'INVALID-ID', { shipping_date: '2025-01-25' }),
+        ).rejects.toThrow(NotFoundError)
+      })
+
+      it('バリデーションエラーが発生する（無効な郵便番号）', async () => {
+        const { updateShipmentByAccountId } = await import('../../src/resources/shipments')
+        const invalidData = {
+          recipient: {
+            name: '山田太郎',
+            postcode: '123', // Invalid: too short
+            prefecture: '東京都',
+            address1: '千代田1-1-1',
+          },
+        }
+
+        await expect(
+          updateShipmentByAccountId(client, 'TS001', '2015-00001', invalidData),
+        ).rejects.toThrow(ValidationError)
+      })
+
+      it('認証エラーが発生する', async () => {
+        const { updateShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.put(`${BASE_URL}/shipments/:accountId/:identifier`, () => {
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+          }),
+        )
+
+        await expect(
+          updateShipmentByAccountId(client, 'TS001', '2015-00001', { shipping_date: '2025-01-25' }),
+        ).rejects.toThrow(AuthenticationError)
+      })
+
+      it('正しいエンドポイントを呼び出す', async () => {
+        const { updateShipmentByAccountId } = await import('../../src/resources/shipments')
+        let calledPath = ''
+        server.use(
+          http.put(`${BASE_URL}/shipments/:accountId/:identifier`, ({ request }) => {
+            calledPath = new URL(request.url).pathname
+            return HttpResponse.json({
+              id: 'ship-001',
+              identifier: '2015-00001',
+              status: 'PENDING',
+              items: [{ code: 'TEST-001', quantity: 1 }],
+              recipient: {
+                name: '山田太郎',
+                postcode: '1700013',
+                prefecture: '東京都',
+                address1: '豊島区東池袋1-34-5',
+                phone: '0333333333',
+              },
+              updated_at: '2025-01-13T00:00:00Z',
+            })
+          }),
+        )
+
+        await updateShipmentByAccountId(client, 'TS001', '2015-00001', {
+          shipping_date: '2025-01-25',
+        })
+
+        expect(calledPath).toBe('/api/shipments/TS001/2015-00001')
+      })
     })
 
     describe('deleteShipmentByAccountId', () => {
@@ -2135,6 +2406,58 @@ describe('Shipments API', () => {
         await expect(
           deleteShipmentByAccountId(client, 'TS001', '2015-00001'),
         ).resolves.not.toThrow()
+      })
+
+      it('存在しない出荷依頼の削除はNotFoundErrorを投げる', async () => {
+        const { deleteShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.delete(`${BASE_URL}/shipments/:accountId/:identifier`, () => {
+            return HttpResponse.json({ message: 'Shipment not found' }, { status: 404 })
+          }),
+        )
+
+        await expect(deleteShipmentByAccountId(client, 'TS001', 'INVALID-ID')).rejects.toThrow(
+          NotFoundError,
+        )
+      })
+
+      it('認証エラーが発生する', async () => {
+        const { deleteShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.delete(`${BASE_URL}/shipments/:accountId/:identifier`, () => {
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+          }),
+        )
+
+        await expect(deleteShipmentByAccountId(client, 'TS001', '2015-00001')).rejects.toThrow(
+          AuthenticationError,
+        )
+      })
+
+      it('空のaccountIdでエラーが発生する', async () => {
+        const { deleteShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.delete(`${BASE_URL}/shipments/:accountId/:identifier`, () => {
+            return HttpResponse.json({ message: 'Invalid account ID' }, { status: 400 })
+          }),
+        )
+
+        await expect(deleteShipmentByAccountId(client, '', '2015-00001')).rejects.toThrow()
+      })
+
+      it('正しいエンドポイントを呼び出す', async () => {
+        const { deleteShipmentByAccountId } = await import('../../src/resources/shipments')
+        let calledPath = ''
+        server.use(
+          http.delete(`${BASE_URL}/shipments/:accountId/:identifier`, ({ request }) => {
+            calledPath = new URL(request.url).pathname
+            return new HttpResponse(null, { status: 204 })
+          }),
+        )
+
+        await deleteShipmentByAccountId(client, 'TS001', '2015-00001')
+
+        expect(calledPath).toBe('/api/shipments/TS001/2015-00001')
       })
     })
 
@@ -2157,6 +2480,102 @@ describe('Shipments API', () => {
         expect(response.identifier).toBe('2015-00001')
         expect(response.status).toBe('PICKING')
       })
+
+      it('配送時間帯のみ修正できる', async () => {
+        const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
+        const modifyData = {
+          delivery_time_slot: '14',
+        }
+
+        const response = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', modifyData)
+
+        expect(response.identifier).toBe('2015-00001')
+        expect(response.status).toBe('PICKING')
+      })
+
+      it('配送希望日のみ修正できる', async () => {
+        const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
+        const modifyData = {
+          delivery_date: '2025-02-01',
+        }
+
+        const response = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', modifyData)
+
+        expect(response.identifier).toBe('2015-00001')
+        expect(response.status).toBe('PICKING')
+      })
+
+      it('存在しない出荷依頼はNotFoundErrorを投げる', async () => {
+        const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/modify`, () => {
+            return HttpResponse.json({ message: 'Shipment not found' }, { status: 404 })
+          }),
+        )
+
+        await expect(
+          modifyShipmentByAccountId(client, 'TS001', 'INVALID-ID', {
+            delivery_time_slot: 'AM',
+          }),
+        ).rejects.toThrow(NotFoundError)
+      })
+
+      it('認証エラーが発生する', async () => {
+        const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/modify`, () => {
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+          }),
+        )
+
+        await expect(
+          modifyShipmentByAccountId(client, 'TS001', '2015-00001', {
+            delivery_time_slot: 'AM',
+          }),
+        ).rejects.toThrow(AuthenticationError)
+      })
+
+      it('国際配送の受取人情報を修正できる', async () => {
+        const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
+        const modifyData = {
+          recipient: {
+            region_code: 'US',
+            postcode: '10002',
+            city: 'Los Angeles',
+            address: '456 Hollywood Blvd',
+            name: 'Jane Smith',
+            phone: '9876543210',
+          },
+        }
+
+        const response = await modifyShipmentByAccountId(client, 'TS001', '2015-00001', modifyData)
+
+        expect(response.identifier).toBe('2015-00001')
+        expect(response.status).toBe('PICKING')
+      })
+
+      it('正しいエンドポイントを呼び出す', async () => {
+        const { modifyShipmentByAccountId } = await import('../../src/resources/shipments')
+        let calledPath = ''
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/modify`, ({ request }) => {
+            calledPath = new URL(request.url).pathname
+            return HttpResponse.json({
+              id: 'ship-001',
+              identifier: '2015-00001',
+              status: 'PICKING',
+              items: [{ code: 'TEST-001', quantity: 1 }],
+              updated_at: '2025-01-13T00:00:00Z',
+            })
+          }),
+        )
+
+        await modifyShipmentByAccountId(client, 'TS001', '2015-00001', {
+          delivery_time_slot: 'AM',
+        })
+
+        expect(calledPath).toBe('/api/shipments/TS001/2015-00001/modify')
+      })
     })
 
     describe('cancelShipmentByAccountId', () => {
@@ -2168,6 +2587,260 @@ describe('Shipments API', () => {
         expect(response.status).toBe('CANCELLED')
         expect(response.cancelled_at).toBeDefined()
       })
+
+      it('存在しない出荷依頼はNotFoundErrorを投げる', async () => {
+        const { cancelShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/cancel`, () => {
+            return HttpResponse.json({ message: 'Shipment not found' }, { status: 404 })
+          }),
+        )
+
+        await expect(cancelShipmentByAccountId(client, 'TS001', 'INVALID-ID')).rejects.toThrow(
+          NotFoundError,
+        )
+      })
+
+      it('認証エラーが発生する', async () => {
+        const { cancelShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/cancel`, () => {
+            return HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })
+          }),
+        )
+
+        await expect(cancelShipmentByAccountId(client, 'TS001', '2015-00001')).rejects.toThrow(
+          AuthenticationError,
+        )
+      })
+
+      it('既にキャンセル済みの場合はエラーを投げる', async () => {
+        const { cancelShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/cancel`, () => {
+            return HttpResponse.json({ message: 'Already cancelled' }, { status: 400 })
+          }),
+        )
+
+        await expect(cancelShipmentByAccountId(client, 'TS001', '2015-00001')).rejects.toThrow()
+      })
+
+      it('空のJSONボディでリクエストする', async () => {
+        const { cancelShipmentByAccountId } = await import('../../src/resources/shipments')
+        let capturedBody: unknown = undefined
+
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/cancel`, async ({ request }) => {
+            capturedBody = await request.json()
+            return HttpResponse.json({
+              id: 'ship-001',
+              identifier: '2015-00001',
+              status: 'CANCELLED',
+              items: [{ code: 'TEST-001', quantity: 1 }],
+              cancelled_at: '2025-01-13T00:00:00Z',
+            })
+          }),
+        )
+
+        await cancelShipmentByAccountId(client, 'TS001', '2015-00001')
+
+        expect(capturedBody).toEqual({})
+      })
+
+      it('正しいエンドポイントを呼び出す', async () => {
+        const { cancelShipmentByAccountId } = await import('../../src/resources/shipments')
+        let calledPath = ''
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/cancel`, ({ request }) => {
+            calledPath = new URL(request.url).pathname
+            return HttpResponse.json({
+              id: 'ship-001',
+              identifier: '2015-00001',
+              status: 'CANCELLED',
+              items: [{ code: 'TEST-001', quantity: 1 }],
+              cancelled_at: '2025-01-13T00:00:00Z',
+            })
+          }),
+        )
+
+        await cancelShipmentByAccountId(client, 'TS001', '2015-00001')
+
+        expect(calledPath).toBe('/api/shipments/TS001/2015-00001/cancel')
+      })
+
+      it('空のaccountIdでエラーが発生する', async () => {
+        const { cancelShipmentByAccountId } = await import('../../src/resources/shipments')
+        server.use(
+          http.post(`${BASE_URL}/shipments/:accountId/:identifier/cancel`, () => {
+            return HttpResponse.json({ message: 'Invalid account ID' }, { status: 400 })
+          }),
+        )
+
+        await expect(cancelShipmentByAccountId(client, '', '2015-00001')).rejects.toThrow()
+      })
+    })
+  })
+
+  describe('エッジケース: 日付パラメータ境界値テスト', () => {
+    it('2月29日（うるう年2024年）で出荷実績を取得できる', async () => {
+      const response = await getShippedShipmentByDate(client, 2024, 2, 29)
+      expect(response.shipments).toBeDefined()
+      expect(Array.isArray(response.shipments)).toBe(true)
+    })
+  })
+
+  describe('エッジケース: 特殊文字テスト', () => {
+    it("特殊文字を含む受取人名で出荷依頼を作成できる (O'Brien)", async () => {
+      const shipmentData = {
+        order_no: 'ORDER-SPECIAL-001',
+        items: [{ code: 'TEST-001', quantity: 1 }],
+        recipient: {
+          name: "O'Brien",
+          postcode: '1000001',
+          prefecture: '東京都',
+          address1: '千代田1-1-1',
+          phone: '09012345678',
+        },
+      }
+
+      const response = await createShipment(client, shipmentData)
+      expect(response.status).toBe('PENDING')
+      expect(response.recipient?.name).toBe("O'Brien")
+    })
+
+    it('アクセント記号付き文字を含む受取人名で出荷依頼を作成できる (José García)', async () => {
+      const shipmentData = {
+        order_no: 'ORDER-ACCENT-001',
+        items: [{ code: 'TEST-001', quantity: 1 }],
+        recipient: {
+          name: 'José García',
+          postcode: '1000001',
+          prefecture: '東京都',
+          address1: '千代田1-1-1',
+          phone: '09012345678',
+        },
+      }
+
+      const response = await createShipment(client, shipmentData)
+      expect(response.status).toBe('PENDING')
+      expect(response.recipient?.name).toBe('José García')
+    })
+
+    it('全角文字を含む受取人名で出荷依頼を作成できる', async () => {
+      const shipmentData = {
+        order_no: 'ORDER-FULLWIDTH-001',
+        items: [{ code: 'TEST-001', quantity: 1 }],
+        recipient: {
+          name: '山田　太郎（ヤマダ　タロウ）',
+          postcode: '1000001', // 郵便番号は半角数字である必要がある
+          prefecture: '東京都',
+          address1: '千代田１−１−１',
+          phone: '09012345678', // 電話番号も半角数字である必要がある
+        },
+      }
+
+      const response = await createShipment(client, shipmentData)
+      expect(response.status).toBe('PENDING')
+      expect(response.recipient?.name).toBe('山田　太郎（ヤマダ　タロウ）')
+    })
+  })
+
+  describe('エッジケース: 配列境界値テスト', () => {
+    it('出荷依頼を1件だけ一括作成できる（最小）', async () => {
+      const shipmentsData = {
+        shipments: [
+          {
+            order_no: 'ORDER-SINGLE',
+            items: [{ code: 'TEST-001', quantity: 1 }],
+            recipient: {
+              name: '山田太郎',
+              postcode: '1000001',
+              prefecture: '東京都',
+              address1: '千代田1-1-1',
+              phone: '09012345678',
+            },
+          },
+        ],
+      }
+
+      const response = await bulkCreateShipments(client, shipmentsData)
+      expect(response.shipments).toHaveLength(1)
+      expect(response.shipments[0].order_no).toBe('ORDER-SINGLE')
+    })
+
+    it('商品を5個含む出荷依頼を作成できる（bundled_items上限）', async () => {
+      const shipmentData = {
+        order_no: 'ORDER-MAX-ITEMS',
+        items: [
+          { code: 'TEST-001', quantity: 1 },
+          { code: 'TEST-002', quantity: 1 },
+          { code: 'TEST-003', quantity: 1 },
+          { code: 'TEST-004', quantity: 1 },
+          { code: 'TEST-005', quantity: 1 },
+        ],
+        recipient: {
+          name: '山田太郎',
+          postcode: '1000001',
+          prefecture: '東京都',
+          address1: '千代田1-1-1',
+          phone: '09012345678',
+        },
+      }
+
+      const response = await createShipment(client, shipmentData)
+      expect(response.status).toBe('PENDING')
+      expect(response.items).toHaveLength(5)
+    })
+  })
+
+  describe('エッジケース: 数値境界値テスト', () => {
+    it('出荷数量1（最小）で出荷依頼を作成できる', async () => {
+      const shipmentData = {
+        order_no: 'ORDER-MIN-QTY',
+        items: [{ code: 'TEST-001', quantity: 1 }],
+        recipient: {
+          name: '山田太郎',
+          postcode: '1000001',
+          prefecture: '東京都',
+          address1: '千代田1-1-1',
+          phone: '09012345678',
+        },
+      }
+
+      const response = await createShipment(client, shipmentData)
+      expect(response.status).toBe('PENDING')
+      expect(response.items[0].quantity).toBe(1)
+    })
+
+    it('大きな数値の金額で出荷依頼を作成できる（unit_price, price）', async () => {
+      const shipmentData = {
+        order_no: 'ORDER-LARGE-AMOUNT',
+        items: [{ code: 'TEST-001', quantity: 10, unit_price: 999999, price: 9999990 }],
+        recipient: {
+          name: '山田太郎',
+          postcode: '1000001',
+          prefecture: '東京都',
+          address1: '千代田1-1-1',
+          phone: '09012345678',
+        },
+      }
+
+      const response = await createShipment(client, shipmentData)
+      expect(response.status).toBe('PENDING')
+      expect(response.items[0].unit_price).toBe(999999)
+      expect(response.items[0].price).toBe(9999990)
+    })
+  })
+
+  describe('エッジケース: 空/オプショナルフィールドテスト', () => {
+    it('オプショナルフィールドのみで出荷依頼を更新できる', async () => {
+      const updateData = {
+        shipping_date: '2025-01-25',
+      }
+
+      const response = await updateShipment(client, 'ship-001', updateData)
+      expect(response.shipping_date).toBe('2025-01-25')
+      expect(response.updated_at).toBeDefined()
     })
   })
 })
