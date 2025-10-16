@@ -6,6 +6,18 @@ TypeScript/JavaScriptでOpenLogi APIを利用するための型安全なSDKで�
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-blue.svg)](https://www.typescriptlang.org/)
 
+## ⚠️ 警告 / IMPORTANT NOTICE
+
+**このSDKは非公式のものであり、十分なテストがされていません。**
+
+- ⚠️ **非公式SDK**: このSDKはOpenLogiの公式SDKではありません
+- ⚠️ **テスト不足**: 本番環境での十分な動作検証が行われていません
+- ⚠️ **自己責任**: 使用は完全に自己責任となります
+- ⚠️ **本番環境**: 本番環境で使用する場合は、十分な検証とテストを実施してください
+- ⚠️ **サポート**: 公式サポートは提供されません
+
+**本番環境での使用前に、必ず独自の十分なテストを実施してください。**
+
 ## 概要
 
 このSDKは、OpenLogi APIとの統合を簡単かつ型安全に行うためのライブラリです。商品管理、入荷依頼、出荷依頼などの主要な機能をサポートしています。
@@ -1136,8 +1148,8 @@ npm run build
 
 ## リンク
 
-- [OpenLogi 公式サイト](https://www.openlogi.com/)
-- [API仕様書](https://www.openlogi.com/api-docs) (注: 実際のリンクに置き換えてください)
+- [OpenLogi 公式サイト](https://service.openlogi.com/)
+- [API仕様書](https://api.openlogi.com/doc/api.html)
 - [Issues](https://github.com/your-repo/openlogi-api-sdk/issues)
 - [Changelog](CHANGELOG.md)
 
